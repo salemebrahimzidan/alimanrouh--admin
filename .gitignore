@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.local
+.env.*.local
+.vercel
+supabase/manual/bootstrap_admin.sql
+.DS_Store
+*.tsbuildinfo
+.vite

@@ -1,0 +1,114 @@
+import { useEffect, useState, type FormEvent } from 'react'
+import { useAuth } from '../../auth/AuthProvider'
+import { listAuditLogs, type AuditRow } from '../../lib/api'
+import { agencyName } from '../../lib/config'
+import { errorText, formatDateTime } from '../../lib/format'
+import { label } from '../../lib/labels'
+import { updatePassword } from '../../lib/portal'
+import { Button, Card, ErrorBanner, LoadingState, PageHeader, TextField } from '../../components/ui'
+
+export function SettingsPage() {
+  const { session } = useAuth()
+  const [logs, setLogs] = useState<AuditRow[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    listAuditLogs()
+      .then((rows) => {
+        if (active) setLogs(rows)
+      })
+      .catch((err: unknown) => {
+        if (active) setError(errorText(err))
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const password = String(form.get('password') ?? '')
+    const confirm = String(form.get('confirm') ?? '')
+    if (password.length < 8) {
+      setError('كلمة المرور يجب ألا تقل عن 8 أحرف.')
+      return
+    }
+    if (password !== confirm) {
+      setError('كلمتا المرور غير متطابقتين.')
+      return
+    }
+    setPending(true)
+    setError(null)
+    setNotice(null)
+    try {
+      await updatePassword(password)
+      event.currentTarget.reset()
+      setNotice('تم تحديث كلمة المرور.')
+    } catch (err) {
+      setError(errorText(err))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <div>
+      <PageHeader title="الإعدادات" description="حساب الإدارة الحالي وسجل العمليات المهمة. لا توجد إدارة موظفين أو أدوار." />
+      {error ? <div className="mb-4"><ErrorBanner message={error} /></div> : null}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <h3 className="font-semibold text-navy">الحساب</h3>
+          <dl className="mt-4 space-y-3 text-sm">
+            <div>
+              <dt className="text-muted">الوكالة</dt>
+              <dd className="mt-1">{agencyName}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">البريد</dt>
+              <dd className="mt-1">{session?.user.email}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">مشروع Supabase</dt>
+              <dd className="mt-1 break-all">{import.meta.env.VITE_SUPABASE_URL}</dd>
+            </div>
+          </dl>
+          <p className="mt-4 text-xs leading-6 text-muted">
+            مفتاح service role غير مستخدم في هذه الواجهة، ولا يجب وضعه في ملفات البيئة الخاصة بها.
+          </p>
+        </Card>
+        <Card>
+          <h3 className="font-semibold text-navy">تغيير كلمة المرور</h3>
+          <form onSubmit={submit} className="mt-4 space-y-4">
+            <TextField label="كلمة المرور الجديدة" name="password" type="password" autoComplete="new-password" required minLength={8} />
+            <TextField label="التأكيد" name="confirm" type="password" autoComplete="new-password" required minLength={8} />
+            {notice ? <p className="text-sm text-emerald-800">{notice}</p> : null}
+            <Button type="submit" disabled={pending}>{pending ? 'جارٍ الحفظ...' : 'تحديث كلمة المرور'}</Button>
+          </form>
+        </Card>
+      </div>
+      <Card className="mt-6">
+        <h3 className="font-semibold text-navy">سجل التدقيق</h3>
+        {loading ? <LoadingState /> : null}
+        {!loading && !error && logs.length === 0 ? <p className="mt-3 text-sm text-muted">لا توجد عمليات مسجلة بعد.</p> : null}
+        {!loading && logs.length > 0 ? (
+          <ul className="mt-4 divide-y divide-line">
+            {logs.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                <span>{label.audit(item.action)}</span>
+                <span className="text-xs text-muted">{formatDateTime(item.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </Card>
+    </div>
+  )
+}
