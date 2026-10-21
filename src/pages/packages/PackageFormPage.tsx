@@ -1,9 +1,11 @@
+import { BedDouble, Bus, Calendar, FileText } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { getPackage, savePackage, uploadPublicImage } from '../../lib/api'
 import { errorText } from '../../lib/format'
 import { mediaUrl } from '../../lib/supabase'
-import { BackLink, Button, Card, ErrorBanner, LoadingState, TextAreaField, TextField } from '../../components/ui'
+import { ProgramForm } from '../../components/ProgramForm'
+import { LoadingState, TextAreaField, TextField } from '../../components/ui'
 
 export function PackageFormPage() {
   const { id } = useParams()
@@ -90,41 +92,29 @@ export function PackageFormPage() {
   }
 
   if (loading) return <LoadingState />
-  const preview = mediaUrl(imagePath)
 
   return (
-    <div>
-      <BackLink to="/umrah">العودة إلى البرامج</BackLink>
-      <h2 className="mb-6 text-2xl font-semibold text-navy">{id ? 'تعديل برنامج العمرة' : 'برنامج عمرة جديد'}</h2>
-      <Card>
-        <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-          <TextField label="اسم البرنامج" name="title" value={values.title} onChange={(event) => setValues({ ...values, title: event.target.value })} required />
-          <TextField label="السعر بالريال السعودي" name="price_sar" type="number" min="0" step="0.01" value={values.price_sar} onChange={(event) => setValues({ ...values, price_sar: event.target.value })} required />
-          <TextField label="المدة بالأيام" name="duration_days" type="number" min="1" step="1" value={values.duration_days} onChange={(event) => setValues({ ...values, duration_days: event.target.value })} required />
-          <TextField label="الفندق" name="hotel_info" value={values.hotel_info} onChange={(event) => setValues({ ...values, hotel_info: event.target.value })} />
-          <div className="md:col-span-2">
-            <TextField label="التنقل" name="transportation" value={values.transportation} onChange={(event) => setValues({ ...values, transportation: event.target.value })} />
-          </div>
-          <div className="md:col-span-2">
-            <TextAreaField label="وصف البرنامج" name="description" rows={5} value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm font-medium text-ink">
-              صورة البرنامج
-              <input name="image" type="file" accept="image/jpeg,image/png,image/webp" className="mt-1.5 block w-full text-sm" />
-            </label>
-            {preview ? <img src={preview} alt="" className="mt-3 h-32 w-48 rounded-lg object-cover" /> : null}
-          </div>
-          <label className="flex items-center gap-2 text-sm text-ink md:col-span-2">
-            <input type="checkbox" checked={values.is_published} onChange={(event) => setValues({ ...values, is_published: event.target.checked })} />
-            نشر البرنامج للموقع
-          </label>
-          {error ? <div className="md:col-span-2"><ErrorBanner message={error} /></div> : null}
-          <div>
-            <Button type="submit" disabled={pending}>{pending ? 'جارٍ الحفظ...' : 'حفظ البرنامج'}</Button>
-          </div>
-        </form>
-      </Card>
-    </div>
+    <ProgramForm
+      backTo="/umrah"
+      backLabel="العودة إلى البرامج"
+      title={id ? 'تعديل برنامج العمرة' : 'برنامج عمرة جديد'}
+      description="أدخل تفاصيل البرنامج، ثم انشره عندما يكون جاهزاً للظهور في الموقع."
+      pending={pending}
+      error={error}
+      onSubmit={submit}
+      imageUrl={mediaUrl(imagePath)}
+      onImageClear={() => setImagePath(null)}
+      published={values.is_published}
+      onPublishedChange={(next) => setValues({ ...values, is_published: next })}
+    >
+      <TextField label="اسم البرنامج" name="title" icon={<FileText className="h-4 w-4" />} value={values.title} onChange={(event) => setValues({ ...values, title: event.target.value })} placeholder="مثال: برنامج العمرة المميز" required />
+      <TextField label="السعر بالريال السعودي" name="price_sar" type="number" min="0" step="0.01" value={values.price_sar} onChange={(event) => setValues({ ...values, price_sar: event.target.value })} placeholder="مثال: 4500" required />
+      <TextField label="المدة بالأيام" name="duration_days" icon={<Calendar className="h-4 w-4" />} type="number" min="1" step="1" value={values.duration_days} onChange={(event) => setValues({ ...values, duration_days: event.target.value })} placeholder="مثال: 10" required />
+      <TextField label="الفندق" name="hotel_info" icon={<BedDouble className="h-4 w-4" />} value={values.hotel_info} onChange={(event) => setValues({ ...values, hotel_info: event.target.value })} placeholder="مثال: فندق 5 نجوم" />
+      <TextField label="التنقل" name="transportation" icon={<Bus className="h-4 w-4" />} value={values.transportation} onChange={(event) => setValues({ ...values, transportation: event.target.value })} placeholder="مثال: حافلات خاصة" />
+      <div className="sm:col-span-2">
+        <TextAreaField label="وصف البرنامج" name="description" icon={<FileText className="h-4 w-4" />} rows={5} maxLength={100} value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} placeholder="اكتب تفاصيل البرنامج، الخدمات المشمولة، والمميزات، والمعلومات المهمة..." />
+      </div>
+    </ProgramForm>
   )
 }

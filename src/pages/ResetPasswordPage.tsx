@@ -43,7 +43,7 @@ export function ResetPasswordPage() {
     <div className="grid min-h-screen place-items-center bg-canvas px-6">
       <Card className="w-full max-w-md">
         <h1 className="text-xl font-semibold text-navy">تعيين كلمة مرور جديدة</h1>
-        {loading ? <p className="mt-4 text-sm text-muted">جارٍ التحقق من الرابط...</p> : null}
+        {loading ? <span role="status" aria-busy="true" className="mt-5 inline-block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-navy" /> : null}
         {!loading && !session ? (
           <p className="mt-4 text-sm leading-7 text-muted">
             رابط الاستعادة غير صالح أو انتهت صلاحيته. اطلب رابطاً جديداً من صفحة الدخول.

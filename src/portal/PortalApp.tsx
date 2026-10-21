@@ -49,7 +49,11 @@ function RequireCustomer() {
   const { configured, loading, session } = useAuth()
   if (!configured) return <ConfigurationScreen />
   if (loading) {
-    return <div className="grid min-h-screen place-items-center"><LoadingState /></div>
+    return (
+      <div className="grid min-h-screen place-items-center bg-canvas">
+        <span role="status" aria-busy="true" className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-navy" />
+      </div>
+    )
   }
   if (!session) return <Navigate to="/portal/login" replace />
   return <Outlet />

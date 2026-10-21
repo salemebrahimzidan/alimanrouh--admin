@@ -41,11 +41,11 @@ const bookingStatusLabels: Record<BookingStatus, string> = {
 
 const visaStatusLabels: Record<VisaStatus, string> = {
   submitted: 'تم الاستلام',
-  under_review: 'قيد المراجعة الداخلية',
+  under_review: 'قيد المراجعة',
   documents_requested: 'مطلوب استكمال مستندات',
-  processing: 'قيد المعالجة الداخلية',
+  processing: 'قيد المراجعة',
   ready_for_collection: 'جاهز للمتابعة',
-  closed: 'مغلق',
+  closed: 'مكتمل',
   cancelled: 'ملغى',
 }
 
@@ -84,8 +84,10 @@ const auditActionLabels: Record<string, string> = {
   'profile.account_status': 'تغيير حالة الحساب',
   'booking.created': 'إنشاء حجز',
   'booking.status_change': 'تغيير حالة حجز',
+  'booking.client_note': 'ملاحظة للعميل',
   'visa.created': 'إنشاء طلب تأشيرة',
   'visa.status_change': 'تغيير حالة تأشيرة',
+  'visa.client_note': 'ملاحظة للعميل على طلب تأشيرة',
   'hajj_inquiry.created': 'استفسار حج جديد',
   'hajj_inquiry.status_change': 'تغيير حالة استفسار',
   'payment.recorded': 'تسجيل دفعة',
@@ -119,10 +121,20 @@ export function accountTone(status: string): Tone {
   return 'neutral'
 }
 
+const bookingFlow = ['pending', 'under_review', 'confirmed', 'completed'] as const satisfies readonly BookingStatus[]
+
+export function nextBookingStatuses(current: string): BookingStatus[] {
+  const index = bookingFlow.indexOf(current as (typeof bookingFlow)[number])
+  if (index < 0 || index >= bookingFlow.length - 1) return []
+  const next = bookingFlow[index + 1]
+  return next ? [next, 'cancelled'] : []
+}
+
 export function bookingTone(status: string): Tone {
   if (status === 'pending') return 'warning'
   if (status === 'under_review') return 'info'
   if (status === 'confirmed') return 'success'
+  if (status === 'completed') return 'gold'
   if (status === 'cancelled') return 'danger'
   return 'neutral'
 }
@@ -131,6 +143,7 @@ export function visaTone(status: string): Tone {
   if (status === 'submitted' || status === 'documents_requested') return 'warning'
   if (status === 'under_review' || status === 'processing') return 'info'
   if (status === 'ready_for_collection') return 'success'
+  if (status === 'closed') return 'gold'
   if (status === 'cancelled') return 'danger'
   return 'neutral'
 }

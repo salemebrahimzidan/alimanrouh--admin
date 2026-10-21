@@ -32,6 +32,13 @@ export function formatDateTime(value: string | null | undefined) {
   return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
 }
 
+export function englishAmount(value: number) {
+  return new Intl.NumberFormat('en-GB', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(value)
+}
+
 export function sanitizeSearch(value: string) {
   return value.trim().replace(/[%_\\",]/g, '')
 }
@@ -75,6 +82,7 @@ export function errorText(error: unknown) {
   if (/user already registered/i.test(message)) return 'هذا البريد مسجّل مسبقاً.'
   if (/account cannot/i.test(message)) return 'الحساب غير مفعّل أو موقوف، ولا يمكنه إرسال هذا الطلب.'
   if (/package is not available/i.test(message)) return 'البرنامج غير متاح للحجز.'
+  if (/status must follow the previous step/i.test(message)) return 'لا يمكن تجاوز حالة. انتقل إلى الخطوة التالية فقط.'
   if (/not authorized|permission denied|42501/i.test(message)) return 'ليست لديك صلاحية لتنفيذ هذا الإجراء.'
   if (/more than one relationship was found|could not find a relationship/i.test(message)) {
     return 'تعذر ربط السجلات المرتبطة. حدّث الصفحة.'

@@ -205,10 +205,16 @@ export type DashboardData = {
   pending: number
   underReview: number
   confirmed: number
+  completed: number
+  cancelled: number
   visas: number
   payments: number
   recentBookings: BookingRow[]
   recentCustomers: CustomerRow[]
+  bookingCreatedAt: string[]
+  customerCreatedAt: string[]
+  visaCreatedAt: string[]
+  paymentCreatedAt: string[]
 }
 
 type ListParams = { search: string; status: string; page: number }
@@ -499,6 +505,10 @@ export async function setBookingStatus(id: string, status: BookingStatus, note: 
   unwrap(await db().rpc('admin_set_booking_status', { p_booking_id: id, p_status: status, p_note: note || null }))
 }
 
+export async function addBookingClientNote(id: string, note: string) {
+  unwrap(await db().rpc('admin_add_booking_client_note', { p_booking_id: id, p_note: note }))
+}
+
 export async function listNotes(entityType: 'booking' | 'visa_application' | 'hajj_inquiry', entityId: string) {
   const { data, error } = await db()
     .from('internal_notes')
@@ -527,6 +537,18 @@ export async function addNote(
       author_id: authorId,
     }),
   )
+}
+
+export async function updateNote(id: string, body: string) {
+  const trimmed = body.trim()
+  if (trimmed.length < 1 || trimmed.length > 2000) throw new Error('note is required')
+  const data = unwrap(await db().from('internal_notes').update({ body: trimmed }).eq('id', id).select('id'))
+  if (!Array.isArray(data) || data.length === 0) throw new Error('note not found')
+}
+
+export async function deleteNote(id: string) {
+  const data = unwrap(await db().from('internal_notes').delete().eq('id', id).select('id'))
+  if (!Array.isArray(data) || data.length === 0) throw new Error('note not found')
 }
 
 export async function listPackages() {
@@ -566,6 +588,24 @@ export async function savePackage(input: PackageInput, id?: string) {
   }
   const data = unwrap(await db().from('umrah_packages').insert(input).select('id').single())
   return asText(asRecord(data).id)
+}
+
+export async function setPackagePublished(id: string, isPublished: boolean) {
+  const { error } = await db().from('umrah_packages').update({ is_published: isPublished }).eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function deletePackage(id: string) {
+  const { error } = await db().from('umrah_packages').delete().eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
+export async function deleteVisa(id: string) {
+  const notes = await db().from('internal_notes').delete().eq('entity_type', 'visa_application').eq('entity_id', id)
+  if (notes.error) throw new Error(notes.error.message)
+  const { data, error } = await db().from('visa_applications').delete().eq('id', id).select('id')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('permission denied')
 }
 
 export async function listHajjPrograms() {
@@ -628,7 +668,8 @@ export async function listVisas({ search, status, page }: ListParams) {
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
-  if (status) query = query.eq('status', status)
+  if (status === 'under_review' || status === 'processing') query = query.in('status', ['under_review', 'processing'])
+  else if (status) query = query.eq('status', status)
   const filter = ilikeOr(['reference', 'full_name', 'mobile', 'customer_email', 'nationality'], search)
   if (filter) query = query.or(filter)
   const { from, to } = pageRange(page, pageSize)
@@ -664,6 +705,52 @@ export async function getVisa(id: string) {
 
 export async function setVisaStatus(id: string, status: VisaStatus, note: string) {
   unwrap(await db().rpc('admin_set_visa_status', { p_visa_id: id, p_status: status, p_note: note || null }))
+}
+
+export async function addVisaClientNote(id: string, note: string) {
+  unwrap(await db().rpc('admin_add_visa_client_note', { p_visa_id: id, p_note: note }))
+}
+
+export async function visaHistory(id: string) {
+  const { data, error } = await db()
+    .from('audit_logs')
+    .select('id, action, metadata, created_at')
+    .eq('entity_type', 'visa_application')
+    .eq('entity_id', id)
+    .in('action', ['visa.created', 'visa.status_change', 'visa.client_note'])
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []).flatMap((item) => {
+    const row = asRecord(item)
+    const action = asText(row.action)
+    const meta = asRecord(row.metadata)
+    const created_at = asText(row.created_at)
+    const eventId = asText(row.id)
+    if (action === 'visa.client_note') {
+      const status = asText(meta.status)
+      const note = asNullableText(meta.note)
+      if (!status || !note) return []
+      return [{ id: eventId, old_status: status, new_status: status, note, created_at } satisfies StatusEvent]
+    }
+    if (action === 'visa.created') {
+      return [{
+        id: eventId,
+        old_status: null,
+        new_status: asText(meta.status) || 'submitted',
+        note: null,
+        created_at,
+      } satisfies StatusEvent]
+    }
+    const next = asText(meta.to)
+    if (!next) return []
+    return [{
+      id: eventId,
+      old_status: asNullableText(meta.from),
+      new_status: next,
+      note: asNullableText(meta.note),
+      created_at,
+    } satisfies StatusEvent]
+  })
 }
 
 export async function listDocuments(customerId: string) {
@@ -806,14 +893,25 @@ export async function listAuditLogs() {
   })
 }
 
+async function createdSince(table: string, since: string, column?: string, value?: string) {
+  let query = db().from(table).select('created_at').gte('created_at', since)
+  if (column && value) query = query.eq(column, value)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => asText(asRecord(row).created_at)).filter(Boolean)
+}
+
 export async function dashboardData(): Promise<DashboardData> {
-  const [customers, bookings, pending, underReview, confirmed, visas, payments, recentBookingData, recentCustomerData] =
+  const since = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+  const [customers, bookings, pending, underReview, confirmed, completed, cancelled, visas, payments, recentBookingData, recentCustomerData, bookingCreatedAt, customerCreatedAt, visaCreatedAt, paymentCreatedAt] =
     await Promise.all([
       exactCount('customers'),
       exactCount('bookings'),
       exactCount('bookings', 'status', 'pending'),
       exactCount('bookings', 'status', 'under_review'),
       exactCount('bookings', 'status', 'confirmed'),
+      exactCount('bookings', 'status', 'completed'),
+      exactCount('bookings', 'status', 'cancelled'),
       exactCount('visa_applications'),
       exactCount('payments', 'status', 'recorded'),
       db()
@@ -822,12 +920,16 @@ export async function dashboardData(): Promise<DashboardData> {
           'id, reference, customer_id, package_id, package_title_snapshot, travel_date, travelers_count, total_amount, status, customer_note, created_at, customer_name, customer_mobile, customer_email',
         )
         .order('created_at', { ascending: false })
-        .limit(8),
+        .limit(5),
       db()
         .from('customers')
         .select('id, full_name, mobile, email, account_status, created_at, bookings_count')
         .order('created_at', { ascending: false })
-        .limit(6),
+        .limit(5),
+      createdSince('bookings', since),
+      createdSince('customers', since),
+      createdSince('visa_applications', since),
+      createdSince('payments', since, 'status', 'recorded'),
     ])
   if (recentBookingData.error) throw new Error(recentBookingData.error.message)
   if (recentCustomerData.error) throw new Error(recentCustomerData.error.message)
@@ -837,10 +939,16 @@ export async function dashboardData(): Promise<DashboardData> {
     pending,
     underReview,
     confirmed,
+    completed,
+    cancelled,
     visas,
     payments,
     recentBookings: (recentBookingData.data ?? []).map(mapBooking),
     recentCustomers: (recentCustomerData.data ?? []).map(mapCustomer),
+    bookingCreatedAt,
+    customerCreatedAt,
+    visaCreatedAt,
+    paymentCreatedAt,
   }
 }
 

@@ -63,7 +63,7 @@ export function WebsitePage() {
         </div>
         <div className="xl:col-span-3">
           <DataShell>
-            {loading ? <LoadingState /> : null}
+            {loading ? <LoadingState plain /> : null}
             {!loading && rows.length === 0 ? <EmptyState title="لا يوجد محتوى منشور أو مسودة" /> : null}
             {rows.length > 0 ? (
               <ul className="divide-y divide-line">

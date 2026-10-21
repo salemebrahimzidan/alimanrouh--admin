@@ -1,7 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from './AuthProvider'
 import { agencyName, publicSiteUrl } from '../lib/config'
-import { Button, LoadingState } from '../components/ui'
+import { Button } from '../components/ui'
 
 export function ConfigurationScreen({ detail }: { detail?: string | null }) {
   return (
@@ -50,7 +50,7 @@ export function RequireAdmin() {
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-canvas">
-        <LoadingState label="جارٍ التحقق من الصلاحية" />
+        <span role="status" aria-busy="true" className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-navy" />
       </div>
     )
   }

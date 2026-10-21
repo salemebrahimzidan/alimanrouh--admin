@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { addNote, listHajjPrograms, listInquiries, listNotes, setInquiryStatus, type HajjProgramRow, type InquiryRow, type InternalNote } from '../../lib/api'
-import { hajjDisclaimer } from '../../lib/config'
 import { displayName, errorText, formatDateTime, formatMoney } from '../../lib/format'
 import { hajjInquiryStatuses, inquiryTone, label, type HajjInquiryStatus } from '../../lib/labels'
 import { useAuth } from '../../auth/AuthProvider'
-import { Badge, Button, DataShell, EmptyState, ErrorBanner, LoadingState, Notice, PageHeader } from '../../components/ui'
+import { Badge, Button, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader } from '../../components/ui'
 
 export function HajjPage() {
   const [params, setParams] = useSearchParams()
@@ -44,7 +43,6 @@ export function HajjPage() {
         description="إدارة معلومات البرامج واستفسارات العملاء. الحالات هنا داخلية ولا تمثل توفر مقاعد رسمية."
         action={tab === 'programs' ? <Link to="/hajj/new"><Button>إضافة برنامج</Button></Link> : undefined}
       />
-      <Notice>{hajjDisclaimer}</Notice>
       <div className="my-4 flex gap-2">
         <Button variant={tab === 'programs' ? 'primary' : 'secondary'} onClick={() => setParams({})}>البرامج</Button>
         <Button variant={tab === 'inquiries' ? 'primary' : 'secondary'} onClick={() => setParams({ tab: 'inquiries' })}>الاستفسارات</Button>

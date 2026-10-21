@@ -62,8 +62,9 @@ function InquiryForm({ profile }: { profile: OwnProfile }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const text = String(form.get('message') ?? '').trim()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const text = String(data.get('message') ?? '').trim()
     if (text.length < 5) {
       setError('اكتب رسالة مختصرة عن الاستفسار.')
       return
@@ -73,11 +74,11 @@ function InquiryForm({ profile }: { profile: OwnProfile }) {
     try {
       await createHajjInquiry({
         userId: profile.id,
-        programId: String(form.get('program_id') ?? '') || null,
-        travelers: Number(form.get('travelers') ?? 1),
+        programId: String(data.get('program_id') ?? '') || null,
+        travelers: Number(data.get('travelers') ?? 1),
         message: text,
       })
-      event.currentTarget.reset()
+      form.reset()
       setMessage('تم إرسال الاستفسار، وستتم متابعته داخلياً لدى الوكالة.')
     } catch (err) {
       setError(errorText(err))

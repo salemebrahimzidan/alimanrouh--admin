@@ -182,13 +182,16 @@ export function BookingDetailPage() {
       </dl>
       <h2 className="mt-6 font-semibold text-navy">سجل الحالة</h2>
       <ol className="mt-3 space-y-3">
-        {history.map((event) => (
-          <li key={event.id} className="text-sm">
-            <p>{event.old_status ? `من ${label.booking(event.old_status)} إلى ${label.booking(event.new_status)}` : label.booking(event.new_status)}</p>
-            {event.note ? <p className="text-muted">{event.note}</p> : null}
-            <p className="text-xs text-muted">{formatDateTime(event.created_at)}</p>
-          </li>
-        ))}
+        {history.map((event) => {
+          const noteOnly = event.old_status === event.new_status
+          return (
+            <li key={event.id} className="text-sm">
+              <p>{noteOnly ? 'ملاحظة' : event.old_status ? `من ${label.booking(event.old_status)} إلى ${label.booking(event.new_status)}` : label.booking(event.new_status)}</p>
+              {event.note ? <p className="text-muted">{event.note}</p> : null}
+              <p className="text-xs text-muted">{formatDateTime(event.created_at)}</p>
+            </li>
+          )
+        })}
       </ol>
     </Card>
   )

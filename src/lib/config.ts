@@ -7,6 +7,3 @@ export const customerPortalEnabled =
 
 export const visaDisclaimer =
   'هذه الحالات تمثل المتابعة الداخلية لدى الوكالة، وليست قراراً رسمياً بإصدار التأشيرة.'
-
-export const hajjDisclaimer =
-  'معلومات البرامج والاستفسارات تُدار داخلياً لدى الوكالة، ولا تُعد موافقة أو ترخيصاً رسمياً للحج.'
