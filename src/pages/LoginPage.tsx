@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { MoonStar } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { ConfigurationScreen, NotAdminScreen } from '../auth/RequireAdmin'
-import { Button, ErrorBanner, LoadingState, TextField } from '../components/ui'
+import { Button, ErrorBanner, TextField } from '../components/ui'
 import { agencyName, customerPortalEnabled } from '../lib/config'
 import { errorText, isEmail } from '../lib/format'
 import { db } from '../lib/supabase'
@@ -20,7 +20,7 @@ export function LoginPage() {
   if (loading) {
     return (
       <div className="grid min-h-screen place-items-center bg-canvas">
-        <LoadingState label="جارٍ التحقق من الجلسة" />
+        <span role="status" aria-busy="true" className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-navy" />
       </div>
     )
   }

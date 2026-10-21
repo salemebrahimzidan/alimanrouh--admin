@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
+import { Banknote, Calendar, Receipt, Search, Wallet, type LucideIcon } from 'lucide-react'
 import {
   customerBookingsForPayment,
   listCustomers,
@@ -14,9 +15,9 @@ import {
   type PaymentSummary,
 } from '../../lib/api'
 import { pageSize } from '../../lib/config'
-import { displayName, errorText, formatDate, formatMoney } from '../../lib/format'
+import { displayName, englishAmount, errorText } from '../../lib/format'
 import { label, paymentMethods, type PaymentMethod } from '../../lib/labels'
-import { Badge, Button, Card, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, Pagination, TextAreaField, TextField } from '../../components/ui'
+import { Badge, Button, Card, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, Pagination, SelectField, TextAreaField, TextField } from '../../components/ui'
 
 export function PaymentsPage() {
   const [summary, setSummary] = useState<PaymentSummary | null>(null)
@@ -54,96 +55,134 @@ export function PaymentsPage() {
   return (
     <div>
       <PageHeader title="المدفوعات" description="تسجيل المقبوضات يدوياً ومتابعة المتبقي. لا يوجد ربط مع بوابة دفع." />
-      {error ? <div className="mb-4"><ErrorBanner message={error} /></div> : null}
+      {error ? <div className="mb-6"><ErrorBanner message={error} /></div> : null}
       {loading && !summary ? <LoadingState /> : null}
       {summary ? (
         <div className="mb-6 grid gap-4 md:grid-cols-3">
-          <Metric title="إجمالي المقبوضات" value={formatMoney(summary.recorded_total)} />
-          <Metric title="إجمالي المتبقي" value={formatMoney(summary.outstanding_total)} />
-          <Metric title="عدد القيود المسجلة" value={summary.payments_count.toLocaleString('ar-SA')} />
+          <Metric icon={Wallet} title="إجمالي المقبوضات" value={money(summary.recorded_total)} surface="bg-emerald-50" iconClass="bg-emerald-100 text-emerald-700" />
+          <Metric icon={Receipt} title="إجمالي المتبقي" value={money(summary.outstanding_total)} surface="bg-amber-50" iconClass="bg-amber-100 text-amber-800" />
+          <Metric icon={Banknote} title="عدد القيود المسجلة" value={summary.payments_count.toLocaleString('en-GB')} surface="bg-sky-50" iconClass="bg-sky-100 text-sky-700" />
         </div>
       ) : null}
-      <div className="grid gap-6 xl:grid-cols-5">
+      <div className="mb-6 grid items-start gap-6 xl:grid-cols-5">
         <div className="xl:col-span-2">
           <PaymentForm onSaved={() => setVersion((current) => current + 1)} onError={setError} />
         </div>
-        <Card className="xl:col-span-3">
-          <h3 className="font-semibold text-navy">المتبقي على الحجوزات</h3>
-          {loading ? <LoadingState /> : null}
-          {!loading && !error && outstanding.length === 0 ? <EmptyState title="لا توجد مبالغ متبقية" /> : null}
+        <div className="xl:col-span-3">
+        <DataShell>
+          <div className="border-b border-line px-5 py-4">
+            <h3 className="font-semibold text-navy">المتبقي على الحجوزات</h3>
+            <p className="mt-1 text-sm text-muted">الحجوزات التي ما زال عليها مبلغ.</p>
+          </div>
+          {loading ? <LoadingState plain /> : null}
+          {!loading && !error && outstanding.length === 0 ? <EmptyState title="لا توجد مبالغ متبقية" body="ستظهر الحجوزات هنا عندما يبقى عليها رصيد." /> : null}
           {!loading && outstanding.length > 0 ? (
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full text-right text-sm">
-                <thead className="text-muted">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[420px] text-right text-sm">
+                <thead className="bg-slate-50 text-muted">
                   <tr>
-                    {['الحجز', 'العميل', 'المتبقي'].map((header) => <th key={header} className="py-2 font-medium">{header}</th>)}
+                    {['الحجز', 'العميل', 'المتبقي'].map((header) => <th key={header} className="px-4 py-3 font-medium">{header}</th>)}
                   </tr>
                 </thead>
                 <tbody>
                   {outstanding.map((row) => (
-                    <tr key={row.id} className="border-t border-line">
-                      <td className="py-2"><Link className="text-navy" to={`/bookings/${row.id}`}>{row.reference}</Link></td>
-                      <td className="py-2">{displayName(row.customer_name)}</td>
-                      <td className="py-2">{formatMoney(row.balance_amount)}</td>
+                    <tr key={row.id} className="border-t border-line hover:bg-slate-50">
+                      <td className="px-4 py-3"><Link className="font-medium text-navy" to={`/bookings/${row.id}`}>{row.reference}</Link></td>
+                      <td className="px-4 py-3">{displayName(row.customer_name)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{money(row.balance_amount)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : null}
-        </Card>
-      </div>
-      <div className="mt-6">
-        <h3 className="mb-3 font-semibold text-navy">سجل المدفوعات</h3>
-        <DataShell>
-          {loading ? <LoadingState /> : null}
-          {!loading && !error && payments.length === 0 ? <EmptyState title="لا توجد مدفوعات مسجلة" /> : null}
-          {payments.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-right text-sm">
-                <thead className="bg-slate-50 text-muted">
-                  <tr>
-                    {['التاريخ', 'العميل', 'الحجز', 'الطريقة', 'المبلغ', 'الحالة', ''].map((header) => (
-                      <th key={header} className="px-4 py-3 font-medium">{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {payments.map((payment) => (
-                    <PaymentLine key={payment.id} payment={payment} onChanged={() => setVersion((current) => current + 1)} onError={setError} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : null}
-          <Pagination page={page} pageSize={pageSize} total={total} onPage={setPage} />
         </DataShell>
+        </div>
+      </div>
+      <div className={summary && summary.months.length > 0 ? 'mb-6' : undefined}>
+      <DataShell>
+        <div className="border-b border-line px-5 py-4">
+          <h3 className="font-semibold text-navy">سجل المدفوعات</h3>
+        </div>
+        {loading ? <LoadingState plain /> : null}
+        {!loading && !error && payments.length === 0 ? <EmptyState title="لا توجد مدفوعات مسجلة" body="سجّل أول دفعة من النموذج أعلاه." /> : null}
+        {payments.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-right text-sm">
+              <thead className="bg-slate-50 text-muted">
+                <tr>
+                  {['التاريخ', 'العميل', 'الحجز', 'الطريقة', 'المبلغ', 'الحالة', ''].map((header) => (
+                    <th key={header || 'actions'} className="px-4 py-3 font-medium">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((payment) => (
+                  <PaymentLine key={payment.id} payment={payment} onChanged={() => setVersion((current) => current + 1)} onError={setError} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {!loading && !error ? <Pagination page={page} pageSize={pageSize} total={total} onPage={setPage} /> : null}
+      </DataShell>
       </div>
       {summary && summary.months.length > 0 ? (
-        <Card className="mt-6">
-          <h3 className="font-semibold text-navy">المقبوضات الشهرية</h3>
-          <table className="mt-3 w-full text-right text-sm">
-            <tbody>
-              {summary.months.map((month) => (
-                <tr key={month.month} className="border-t border-line">
-                  <td className="py-2">{month.month}</td>
-                  <td className="py-2">{month.payment_count.toLocaleString('ar-SA')} قيود</td>
-                  <td className="py-2">{formatMoney(month.total)}</td>
+        <DataShell>
+          <div className="border-b border-line px-5 py-4">
+            <h3 className="font-semibold text-navy">المقبوضات الشهرية</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-sm">
+              <thead className="bg-slate-50 text-muted">
+                <tr>
+                  {['الشهر', 'القيود', 'المبلغ'].map((header) => <th key={header} className="px-4 py-3 font-medium">{header}</th>)}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+              </thead>
+              <tbody>
+                {summary.months.map((month) => (
+                  <tr key={month.month} className="border-t border-line">
+                    <td className="px-4 py-3" dir="ltr">{month.month}</td>
+                    <td className="px-4 py-3 tabular-nums" dir="ltr">{month.payment_count.toLocaleString('en-GB')}</td>
+                    <td className="px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{money(month.total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DataShell>
       ) : null}
     </div>
   )
 }
 
-function Metric({ title, value }: { title: string; value: string }) {
+function money(value: number) {
+  return englishAmount(value)
+}
+
+function todayValue() {
+  const now = new Date()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${now.getFullYear()}-${month}-${day}`
+}
+
+function englishDay(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value)
+  if (!match) return value || '—'
+  return `${match[3]}/${match[2]}/${match[1]}`
+}
+
+function Metric({ icon: Icon, title, value, surface, iconClass }: { icon: LucideIcon; title: string; value: string; surface: string; iconClass: string }) {
   return (
-    <article className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-      <p className="text-sm text-muted">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-navy">{value}</p>
+    <article className={`rounded-2xl border border-line p-5 shadow-sm ${surface}`}>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">{title}</p>
+        <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${iconClass}`}>
+          <Icon className="h-5 w-5" aria-hidden="true" />
+        </span>
+      </div>
+      <p className="mt-3 text-2xl font-semibold tabular-nums text-navy" dir="ltr">{value}</p>
     </article>
   )
 }
@@ -151,9 +190,11 @@ function Metric({ title, value }: { title: string; value: string }) {
 function PaymentForm({ onSaved, onError }: { onSaved: () => void; onError: (message: string) => void }) {
   const [query, setQuery] = useState('')
   const [customers, setCustomers] = useState<CustomerRow[]>([])
-  const [customerId, setCustomerId] = useState('')
+  const [customer, setCustomer] = useState<CustomerRow | null>(null)
   const [bookings, setBookings] = useState<BalanceRow[]>([])
+  const [note, setNote] = useState('')
   const [pending, setPending] = useState(false)
+  const customerId = customer?.id ?? ''
 
   useEffect(() => {
     if (query.trim().length < 2) {
@@ -189,9 +230,10 @@ function PaymentForm({ onSaved, onError }: { onSaved: () => void; onError: (mess
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const amount = Number(form.get('amount'))
-    const bookingId = String(form.get('booking_id') ?? '')
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const amount = Number(data.get('amount'))
+    const bookingId = String(data.get('booking_id') ?? '')
     if (!customerId || !Number.isFinite(amount) || amount <= 0) {
       onError('اختر العميل وأدخل مبلغاً أكبر من صفر.')
       return
@@ -202,13 +244,14 @@ function PaymentForm({ onSaved, onError }: { onSaved: () => void; onError: (mess
         customerId,
         bookingId: bookingId || null,
         amount,
-        method: String(form.get('method')) as PaymentMethod,
-        paidOn: String(form.get('paid_on')),
-        note: String(form.get('note') ?? ''),
+        method: String(data.get('method')) as PaymentMethod,
+        paidOn: String(data.get('paid_on')),
+        note,
       })
-      event.currentTarget.reset()
+      form.reset()
       setQuery('')
-      setCustomerId('')
+      setNote('')
+      setCustomer(null)
       onSaved()
     } catch (err) {
       onError(errorText(err))
@@ -219,44 +262,62 @@ function PaymentForm({ onSaved, onError }: { onSaved: () => void; onError: (mess
 
   return (
     <Card>
-      <h3 className="font-semibold text-navy">تسجيل دفعة</h3>
-      <form onSubmit={submit} className="mt-4 space-y-4">
-        <TextField label="بحث عن عميل" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="الاسم أو الجوال أو البريد" />
+      <header className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-semibold text-navy">تسجيل دفعة</h3>
+          <p className="mt-1 text-sm text-muted">اختر العميل، ثم سجّل المبلغ واربطه بحجز عند الحاجة.</p>
+        </div>
+        <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-soft text-navy">
+          <Wallet className="h-5 w-5" aria-hidden="true" />
+        </span>
+      </header>
+      <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <TextField label="بحث عن عميل" icon={<Search className="h-4 w-4" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="الاسم أو الجوال أو البريد" />
+        </div>
+        {customer ? (
+          <p className="rounded-xl bg-gold-soft px-3 py-2 text-sm font-medium text-navy sm:col-span-2">
+            {displayName(customer.full_name)} · {customer.mobile || customer.email || '—'}
+          </p>
+        ) : null}
         {customers.length > 0 ? (
-          <div className="max-h-40 overflow-auto rounded-lg border border-line">
-            {customers.map((customer) => (
+          <div className="max-h-40 overflow-auto rounded-xl border border-line sm:col-span-2">
+            {customers.map((item) => (
               <button
                 type="button"
-                key={customer.id}
-                className={`block w-full px-3 py-2 text-right text-sm hover:bg-slate-50 ${customerId === customer.id ? 'bg-gold-soft' : ''}`}
-                onClick={() => setCustomerId(customer.id)}
+                key={item.id}
+                className={`block w-full px-3 py-2 text-right text-sm hover:bg-slate-50 ${customerId === item.id ? 'bg-gold-soft font-medium text-navy' : ''}`}
+                onClick={() => {
+                  setCustomer(item)
+                  setQuery('')
+                }}
               >
-                {displayName(customer.full_name)} · {customer.mobile || customer.email}
+                {displayName(item.full_name)} · {item.mobile || item.email}
               </button>
             ))}
           </div>
         ) : null}
-        <label className="block text-sm font-medium">
-          الحجز
-          <select name="booking_id" className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" disabled={!customerId}>
+        <div className="sm:col-span-2">
+          <SelectField label="الحجز" name="booking_id" disabled={!customerId}>
             <option value="">بدون ربط بحجز</option>
             {bookings.map((booking) => (
               <option key={booking.id} value={booking.id}>
-                {booking.reference} · المتبقي {formatMoney(Math.max(booking.balance_amount, 0))}
+                {booking.reference} · {money(Math.max(booking.balance_amount, 0))}
               </option>
             ))}
-          </select>
-        </label>
-        <TextField label="المبلغ بالريال" name="amount" type="number" min="0.01" step="0.01" required />
-        <label className="block text-sm font-medium">
-          طريقة الدفع
-          <select name="method" className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" defaultValue="cash">
+          </SelectField>
+        </div>
+        <TextField label="المبلغ بالريال" name="amount" type="number" min="0.01" step="0.01" placeholder="مثال: 500" required />
+        <TextField label="تاريخ الدفع" name="paid_on" type="date" icon={<Calendar className="h-4 w-4" />} required defaultValue={todayValue()} />
+        <div className="sm:col-span-2">
+          <SelectField label="طريقة الدفع" name="method" defaultValue="cash">
             {paymentMethods.map((method) => <option key={method} value={method}>{label.paymentMethod(method)}</option>)}
-          </select>
-        </label>
-        <TextField label="تاريخ الدفع" name="paid_on" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
-        <TextAreaField label="ملاحظة" name="note" rows={2} maxLength={500} />
-        <Button type="submit" disabled={pending || !customerId}>{pending ? 'جارٍ الحفظ...' : 'تسجيل الدفعة'}</Button>
+          </SelectField>
+        </div>
+        <div className="sm:col-span-2">
+          <TextAreaField label="ملاحظة" name="note" rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} placeholder="ملاحظة داخلية عن الدفعة" />
+        </div>
+        <Button type="submit" className="h-11 rounded-xl" disabled={pending || !customerId}>{pending ? 'جارٍ الحفظ...' : 'تسجيل الدفعة'}</Button>
       </form>
     </Card>
   )
@@ -288,12 +349,12 @@ function PaymentLine({
   }
 
   return (
-    <tr className="border-t border-line">
-      <td className="px-4 py-3">{formatDate(payment.paid_on)}</td>
+    <tr className="border-t border-line hover:bg-slate-50">
+      <td className="whitespace-nowrap px-4 py-3 tabular-nums" dir="ltr">{englishDay(payment.paid_on)}</td>
       <td className="px-4 py-3">{displayName(payment.customer_name)}</td>
-      <td className="px-4 py-3">{payment.booking_id ? <Link className="text-navy" to={`/bookings/${payment.booking_id}`}>{payment.booking_reference || 'الحجز'}</Link> : '—'}</td>
+      <td className="px-4 py-3">{payment.booking_id ? <Link className="font-medium text-navy" to={`/bookings/${payment.booking_id}`}>{payment.booking_reference || 'الحجز'}</Link> : '—'}</td>
       <td className="px-4 py-3">{label.paymentMethod(payment.method)}</td>
-      <td className="px-4 py-3">{formatMoney(payment.amount)}</td>
+      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{money(payment.amount)}</td>
       <td className="px-4 py-3"><Badge tone={payment.status === 'recorded' ? 'success' : 'neutral'}>{label.payment(payment.status)}</Badge></td>
       <td className="px-4 py-3">
         {payment.status === 'recorded' && !confirming ? <button type="button" className="text-sm text-rose-700" onClick={() => setConfirming(true)}>إلغاء القيد</button> : null}

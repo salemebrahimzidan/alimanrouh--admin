@@ -34,9 +34,10 @@ export function SettingsPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
-    const password = String(form.get('password') ?? '')
-    const confirm = String(form.get('confirm') ?? '')
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const password = String(data.get('password') ?? '')
+    const confirm = String(data.get('confirm') ?? '')
     if (password.length < 8) {
       setError('كلمة المرور يجب ألا تقل عن 8 أحرف.')
       return
@@ -50,7 +51,7 @@ export function SettingsPage() {
     setNotice(null)
     try {
       await updatePassword(password)
-      event.currentTarget.reset()
+      form.reset()
       setNotice('تم تحديث كلمة المرور.')
     } catch (err) {
       setError(errorText(err))
@@ -96,7 +97,7 @@ export function SettingsPage() {
       </div>
       <Card className="mt-6">
         <h3 className="font-semibold text-navy">سجل التدقيق</h3>
-        {loading ? <LoadingState /> : null}
+        {loading ? <LoadingState plain /> : null}
         {!loading && !error && logs.length === 0 ? <p className="mt-3 text-sm text-muted">لا توجد عمليات مسجلة بعد.</p> : null}
         {!loading && logs.length > 0 ? (
           <ul className="mt-4 divide-y divide-line">

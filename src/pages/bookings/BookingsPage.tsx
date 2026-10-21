@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { listBookings, type BookingRow } from '../../lib/api'
 import { pageSize } from '../../lib/config'
-import { displayName, errorText, formatDateTime, formatMoney } from '../../lib/format'
+import { displayName, englishAmount, errorText } from '../../lib/format'
 import { bookingStatuses, bookingTone, label } from '../../lib/labels'
-import { Badge, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, Pagination, SearchForm, fieldClass } from '../../components/ui'
+import { Badge, DataShell, EmptyState, EnglishWhen, ErrorBanner, FilterSelect, LoadingState, PageHeader, Pagination, SearchForm } from '../../components/ui'
 
 export function BookingsPage() {
   const [params, setParams] = useSearchParams()
@@ -53,18 +53,20 @@ export function BookingsPage() {
       <PageHeader title="الحجوزات" description="حجوزات العمرة التي يرسلها العملاء من الموقع، مع متابعة الحالة والمبلغ وعدد المسافرين." />
       <div className="mb-4 flex flex-wrap gap-3">
         <SearchForm initial={search} placeholder="المرجع أو اسم العميل أو الجوال" onSearch={(q) => update({ q })} />
-        <select className={`${fieldClass} max-w-56`} value={status} onChange={(event) => update({ status: event.target.value })}>
-          <option value="">كل الحالات</option>
-          {bookingStatuses.map((item) => (
-            <option key={item} value={item}>
-              {label.booking(item)}
-            </option>
-          ))}
-        </select>
+        <FilterSelect
+          label="حالة الحجز"
+          value={status}
+          onChange={(next) => update({ status: next })}
+          options={bookingStatuses.map((item) => ({
+            value: item,
+            label: label.booking(item),
+            tone: bookingTone(item),
+          }))}
+        />
       </div>
       {error ? <ErrorBanner message={error} /> : null}
       <DataShell>
-        {loading ? <LoadingState /> : null}
+        {loading ? <LoadingState plain /> : null}
         {!loading && !error && rows.length === 0 ? (
           <EmptyState title="لا توجد حجوزات" body="ستظهر الحجوزات هنا عند إرسالها من حساب العميل." />
         ) : null}
@@ -86,9 +88,9 @@ export function BookingsPage() {
                     </td>
                     <td className="px-4 py-3">{displayName(booking.customer_name)}</td>
                     <td className="px-4 py-3">{booking.package_title_snapshot || '—'}</td>
-                    <td className="px-4 py-3">{formatDateTime(booking.created_at)}</td>
-                    <td className="px-4 py-3">{booking.travelers_count.toLocaleString('ar-SA')}</td>
-                    <td className="px-4 py-3">{formatMoney(booking.total_amount)}</td>
+                    <td className="whitespace-nowrap px-4 py-3" dir="ltr"><EnglishWhen value={booking.created_at} /></td>
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums" dir="ltr">{booking.travelers_count.toLocaleString('en-GB')}</td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{englishAmount(booking.total_amount)}</td>
                     <td className="px-4 py-3"><Badge tone={bookingTone(booking.status)}>{label.booking(booking.status)}</Badge></td>
                   </tr>
                 ))}

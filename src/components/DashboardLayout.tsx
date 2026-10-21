@@ -73,13 +73,13 @@ export function DashboardLayout() {
               end={item.end}
               className={({ isActive }) =>
                 cx(
-                  'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition',
-                  isActive ? 'bg-white/10 text-white shadow-[inset_3px_0_0_0_#c6a15b]' : 'text-white/75 hover:bg-white/5 hover:text-white',
+                  'flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm transition',
+                  isActive ? 'bg-[#1f4f86] text-white shadow-sm' : 'text-white/75 hover:bg-white/5 hover:text-white',
                 )
               }
             >
-              <item.icon className="h-[18px] w-[18px]" />
               <span>{item.label}</span>
+              <item.icon className="h-[18px] w-[18px]" />
             </NavLink>
           ))}
         </nav>
@@ -91,13 +91,11 @@ export function DashboardLayout() {
           </button>
         </div>
       </aside>
-      <div className="lg:mr-[272px]">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-line bg-white/95 px-4 backdrop-blur lg:px-8">
-          <button type="button" className="rounded-lg p-2 text-navy lg:hidden" onClick={() => setOpen(true)} aria-label="فتح القائمة">
+      <div className="min-w-0 lg:mr-[272px]">
+        <header className="sticky top-0 z-20 flex h-16 items-center border-b border-line bg-white/95 px-4 backdrop-blur lg:hidden">
+          <button type="button" className="rounded-lg p-2 text-navy" onClick={() => setOpen(true)} aria-label="فتح القائمة">
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
-          <p className="text-sm text-muted">إدارة تشغيل الوكالة</p>
-          <p className="truncate text-sm font-medium text-navy">{session?.user.email}</p>
         </header>
         <main className="px-4 py-6 lg:px-8 lg:py-8">
           <Outlet />
