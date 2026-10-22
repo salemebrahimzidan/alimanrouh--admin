@@ -649,6 +649,14 @@ export async function saveHajjProgram(input: HajjProgramInput, id?: string) {
   return asText(asRecord(data).id)
 }
 
+export async function setHajjProgramPublished(id: string, isPublished: boolean) {
+  const { error } = await db()
+    .from('hajj_programs')
+    .update({ is_published: isPublished, internal_status: isPublished ? 'published' : 'draft' })
+    .eq('id', id)
+  if (error) throw new Error(error.message)
+}
+
 export async function listInquiries() {
   const { data, error } = await db()
     .from('hajj_inquiry_rows')
@@ -658,8 +666,27 @@ export async function listInquiries() {
   return (data ?? []).map(mapInquiry)
 }
 
+export async function getInquiry(id: string) {
+  const data = unwrap(
+    await db()
+      .from('hajj_inquiry_rows')
+      .select('id, customer_id, program_id, message, travelers_count, internal_status, created_at, customer_name, customer_mobile, customer_email, program_title')
+      .eq('id', id)
+      .maybeSingle(),
+  )
+  return data ? mapInquiry(data) : null
+}
+
 export async function setInquiryStatus(id: string, status: HajjInquiryStatus) {
   unwrap(await db().from('hajj_inquiries').update({ internal_status: status }).eq('id', id))
+}
+
+export async function deleteInquiry(id: string) {
+  const notes = await db().from('internal_notes').delete().eq('entity_type', 'hajj_inquiry').eq('entity_id', id)
+  if (notes.error) throw new Error(notes.error.message)
+  const { data, error } = await db().from('hajj_inquiries').delete().eq('id', id).select('id')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('permission denied')
 }
 
 export async function listVisas({ search, status, page }: ListParams) {
@@ -711,6 +738,42 @@ export async function setVisaStatus(id: string, status: VisaStatus, note: string
 
 export async function addVisaClientNote(id: string, note: string) {
   unwrap(await db().rpc('admin_add_visa_client_note', { p_visa_id: id, p_note: note }))
+}
+
+export async function inquiryHistory(id: string) {
+  const { data, error } = await db()
+    .from('audit_logs')
+    .select('id, action, metadata, created_at')
+    .eq('entity_type', 'hajj_inquiry')
+    .eq('entity_id', id)
+    .in('action', ['hajj_inquiry.created', 'hajj_inquiry.status_change'])
+    .order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []).flatMap((item) => {
+    const row = asRecord(item)
+    const action = asText(row.action)
+    const meta = asRecord(row.metadata)
+    const created_at = asText(row.created_at)
+    const eventId = asText(row.id)
+    if (action === 'hajj_inquiry.created') {
+      return [{
+        id: eventId,
+        old_status: null,
+        new_status: 'new',
+        note: null,
+        created_at,
+      } satisfies StatusEvent]
+    }
+    const next = asText(meta.to)
+    if (!next) return []
+    return [{
+      id: eventId,
+      old_status: asNullableText(meta.from),
+      new_status: next,
+      note: null,
+      created_at,
+    } satisfies StatusEvent]
+  })
 }
 
 export async function visaHistory(id: string) {

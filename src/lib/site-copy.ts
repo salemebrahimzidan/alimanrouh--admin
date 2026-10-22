@@ -83,6 +83,7 @@ export const siteSections: SiteSection[] = [
         title: 'روابط التواصل',
         hint: 'اترك الحقل فارغاً لإخفاء الأيقونة. الرابط يجب أن يبدأ بـ https://',
         fields: [
+          text('shared', 'company.social.whatsapp', 'واتساب', '', '', { localized: false, input: 'url' }),
           text('shared', 'company.social.instagram', 'إنستغرام', '', '', { localized: false, input: 'url' }),
           text('shared', 'company.social.facebook', 'فيسبوك', '', '', { localized: false, input: 'url' }),
           text('shared', 'company.social.x', 'إكس', '', '', { localized: false, input: 'url' }),

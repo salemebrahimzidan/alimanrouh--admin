@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   CalendarCheck,
   FileText,
@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   MoonStar,
   Settings,
   Users,
@@ -25,11 +26,19 @@ const items = [
   { to: '/bookings', label: 'الحجوزات', icon: CalendarCheck, end: false },
   { to: '/umrah', label: 'برامج العمرة', icon: MoonStar, end: false },
   { to: '/hajj', label: 'برامج الحج', icon: Landmark, end: false },
+  { to: '/hajj/inquiries', label: 'الاستفسارات والشكاوي', icon: MessageSquare, end: true },
   { to: '/visas', label: 'طلبات التأشيرات', icon: FileText, end: false },
   { to: '/payments', label: 'المدفوعات', icon: Wallet, end: false },
   { to: '/website', label: 'إدارة الموقع', icon: Globe, end: false },
   { to: '/settings', label: 'الإعدادات', icon: Settings, end: false },
 ]
+
+function itemActive(to: string, pathname: string, end: boolean) {
+  if (to === '/hajj') return pathname === '/hajj' || (pathname.startsWith('/hajj/') && !pathname.startsWith('/hajj/inquiries'))
+  if (to === '/hajj/inquiries') return pathname === '/hajj/inquiries' || pathname.startsWith('/hajj/inquiries/')
+  if (end) return pathname === to
+  return pathname === to || pathname.startsWith(`${to}/`)
+}
 
 export function DashboardLayout() {
   const { session, signOut } = useAuth()
@@ -71,22 +80,23 @@ export function DashboardLayout() {
           </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {items.map((item) => (
-            <NavLink
+          {items.map((item) => {
+            const active = itemActive(item.to, location.pathname, item.end)
+            return (
+            <Link
               key={item.to}
               to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cx(
-                  'flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm transition',
-                  isActive ? 'bg-[#1f4f86] text-white shadow-sm' : 'text-white/75 hover:bg-white/5 hover:text-white',
-                )
-              }
+              aria-current={active ? 'page' : undefined}
+              className={cx(
+                'flex items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-sm transition',
+                active ? 'bg-[#1f4f86] text-white shadow-sm' : 'text-white/75 hover:bg-white/5 hover:text-white',
+              )}
             >
               <span>{item.label}</span>
               <item.icon className="h-[18px] w-[18px]" />
-            </NavLink>
-          ))}
+            </Link>
+            )
+          })}
         </nav>
         <div className="border-t border-white/10 p-4">
           <p className="truncate text-xs text-white/70">{session?.user.email}</p>
