@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { deleteContent, listContent, saveContent, uploadPublicImage, type ContentInput, type ContentRow } from '../../lib/api'
 import { errorText } from '../../lib/format'
 import { contentKinds, label, type ContentKind } from '../../lib/labels'
+import { siteSections, type SiteSectionId } from '../../lib/site-copy'
 import { mediaUrl } from '../../lib/supabase'
-import { Badge, Button, Card, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, TextAreaField, TextField } from '../../components/ui'
+import { Badge, Button, Card, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, TextAreaField, TextField, cx } from '../../components/ui'
+import { SiteCopyForm } from './SiteCopyForm'
 
 const empty: ContentInput = {
   kind: 'banner',
@@ -15,12 +17,57 @@ const empty: ContentInput = {
   is_published: false,
 }
 
+const kindHints: Record<ContentKind, string> = {
+  banner: 'بطاقة بصورة في الصفحة الرئيسية.',
+  offer: 'بطاقة في صفحة العروض.',
+  announcement: 'شريط إعلان في الصفحة الرئيسية.',
+}
+
+const tabs: Array<{ id: SiteSectionId | 'media'; label: string }> = [
+  { id: 'identity', label: 'الهوية والتواصل' },
+  { id: 'home', label: 'الرئيسية' },
+  { id: 'pages', label: 'الصفحات' },
+  { id: 'media', label: 'البنرات والعروض' },
+]
+
 export function WebsitePage() {
+  const [tab, setTab] = useState<(typeof tabs)[number]['id']>('identity')
+  const section = siteSections.find((item) => item.id === tab)
+
+  return (
+    <div>
+      <PageHeader
+        title="إدارة الموقع"
+        description="عدّل من هنا بيانات الوكالة ونصوص الصفحات والبنرات والعروض. الحفظ ينشر التغيير في الموقع الرسمي. برامج العمرة والحج وأسعارها تبقى في صفحاتها."
+      />
+      <div className="mb-6 flex flex-wrap gap-2">
+        {tabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={cx(
+              'h-10 rounded-full px-4 text-sm font-medium transition',
+              tab === item.id ? 'bg-navy text-white' : 'border border-line bg-white text-navy hover:bg-slate-50',
+            )}
+            onClick={() => setTab(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+      {section ? <SiteCopyForm key={section.id} section={section} /> : <MediaManager />}
+    </div>
+  )
+}
+
+function MediaManager() {
   const [rows, setRows] = useState<ContentRow[]>([])
   const [editing, setEditing] = useState<ContentRow | null>(null)
+  const [kind, setKind] = useState<ContentKind | 'all'>('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
+  const visible = kind === 'all' ? rows : rows.filter((item) => item.kind === kind)
 
   useEffect(() => {
     let active = true
@@ -44,10 +91,6 @@ export function WebsitePage() {
 
   return (
     <div>
-      <PageHeader
-        title="إدارة الموقع"
-        description="البنرات والعروض والإعلانات المنشورة هي المحتوى الذي سيقرأه الموقع الرسمي بعد الربط. برامج العمرة والحج وأسعارها تُدار من صفحاتها."
-      />
       {error ? <div className="mb-4"><ErrorBanner message={error} /></div> : null}
       <div className="grid gap-6 xl:grid-cols-5">
         <div className="xl:col-span-2">
@@ -58,28 +101,44 @@ export function WebsitePage() {
               setEditing(null)
               setVersion((current) => current + 1)
             }}
+            onCancel={editing ? () => setEditing(null) : undefined}
             onError={setError}
           />
         </div>
         <div className="xl:col-span-3">
+          <div className="mb-3 flex flex-wrap gap-2">
+            <FilterChip active={kind === 'all'} onClick={() => setKind('all')}>الكل</FilterChip>
+            {contentKinds.map((item) => (
+              <FilterChip key={item} active={kind === item} onClick={() => setKind(item)}>{label.content(item)}</FilterChip>
+            ))}
+          </div>
           <DataShell>
             {loading ? <LoadingState plain /> : null}
-            {!loading && rows.length === 0 ? <EmptyState title="لا يوجد محتوى منشور أو مسودة" /> : null}
-            {rows.length > 0 ? (
+            {!loading && visible.length === 0 ? (
+              <EmptyState title="لا يوجد محتوى" body="أضف بنراً أو عرضاً أو إعلاناً، ثم فعّل النشر ليظهر في الموقع." />
+            ) : null}
+            {visible.length > 0 ? (
               <ul className="divide-y divide-line">
-                {rows.map((item) => (
-                  <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                    <div>
-                      <p className="font-medium text-navy">{item.title}</p>
-                      <p className="mt-1 text-xs text-muted">{label.content(item.kind)} · الترتيب {item.sort_order.toLocaleString('ar-SA')}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <Badge tone={item.is_published ? 'success' : 'neutral'}>{item.is_published ? 'منشور' : 'مسودة'}</Badge>
-                      <button type="button" className="text-sm text-navy" onClick={() => setEditing(item)}>تعديل</button>
-                      <DeleteContent id={item.id} onDone={() => setVersion((current) => current + 1)} onError={setError} />
-                    </div>
-                  </li>
-                ))}
+                {visible.map((item) => {
+                  const image = mediaUrl(item.image_path)
+                  return (
+                    <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        {image ? <img src={image} alt="" className="h-14 w-20 rounded-lg object-cover" /> : <span className="h-14 w-20 rounded-lg bg-slate-100" />}
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-navy">{item.title}</p>
+                          <p className="mt-1 text-xs text-muted">{label.content(item.kind)} · الترتيب {item.sort_order.toLocaleString('en-GB')}</p>
+                          {item.body ? <p className="mt-1 line-clamp-1 text-xs text-muted">{item.body}</p> : null}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Badge tone={item.is_published ? 'success' : 'neutral'}>{item.is_published ? 'منشور' : 'مسودة'}</Badge>
+                        <button type="button" className="text-sm text-navy" onClick={() => setEditing(item)}>تعديل</button>
+                        <DeleteContent id={item.id} onDone={() => setVersion((current) => current + 1)} onError={setError} />
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             ) : null}
           </DataShell>
@@ -89,13 +148,27 @@ export function WebsitePage() {
   )
 }
 
+function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return (
+    <button
+      type="button"
+      className={cx('h-9 rounded-full px-3 text-sm', active ? 'bg-navy text-white' : 'border border-line bg-white text-navy')}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
 function ContentForm({
   initial,
   onSaved,
+  onCancel,
   onError,
 }: {
   initial: ContentRow | null
   onSaved: () => void
+  onCancel?: () => void
   onError: (message: string) => void
 }) {
   const [pending, setPending] = useState(false)
@@ -143,13 +216,14 @@ function ContentForm({
 
   return (
     <Card>
-      <h3 className="font-semibold text-navy">{initial ? 'تعديل المحتوى' : 'محتوى جديد'}</h3>
+      <h3 className="font-semibold text-navy">{initial ? 'تعديل المحتوى' : 'إضافة بنر أو عرض أو إعلان'}</h3>
       <form onSubmit={submit} className="mt-4 space-y-4">
         <label className="block text-sm font-medium">
           النوع
           <select className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" value={kind} onChange={(event) => setKind(event.target.value as ContentKind)}>
             {contentKinds.map((item) => <option key={item} value={item}>{label.content(item)}</option>)}
           </select>
+          <span className="mt-1 block text-xs font-normal text-muted">{kindHints[kind]}</span>
         </label>
         <TextField label="العنوان" name="title" defaultValue={initial?.title ?? empty.title} required />
         <TextAreaField label="النص" name="body" rows={4} defaultValue={initial?.body ?? ''} />
@@ -164,7 +238,10 @@ function ContentForm({
           <input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} />
           نشر في الموقع
         </label>
-        <Button type="submit" disabled={pending}>{pending ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={pending}>{pending ? 'جارٍ الحفظ...' : 'حفظ'}</Button>
+          {onCancel ? <Button variant="secondary" onClick={onCancel}>إلغاء التعديل</Button> : null}
+        </div>
       </form>
     </Card>
   )

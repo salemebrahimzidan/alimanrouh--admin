@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Pencil, Trash2, X } from 'lucide-react'
+import { Banknote, CalendarDays, MoonStar, Pencil, Plane, Trash2, X } from 'lucide-react'
 import { deletePackage, listPackages, setPackagePublished, type PackageRow } from '../../lib/api'
 import { englishAmount, errorText } from '../../lib/format'
 import { mediaUrl } from '../../lib/supabase'
@@ -66,83 +66,112 @@ export function PackagesPage() {
     <div className="min-w-0">
       <PageHeader
         title="برامج العمرة"
-        description="البرامج المنشورة تصبح متاحة للموقع الرسمي بعد الربط. السعر يُحفظ بالريال السعودي."
         action={<Link to="/umrah/new"><Button>إضافة برنامج</Button></Link>}
       />
       {error ? <ErrorBanner message={error} /> : null}
-      <DataShell>
-        {loading ? <LoadingState plain /> : null}
-        {!loading && rows.length === 0 ? <EmptyState title="لا توجد برامج عمرة" body="أضف أول برنامج ثم انشره عندما يجهز." /> : null}
-        {!loading && rows.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-right text-sm">
-              <thead className="bg-slate-50 text-muted">
-                <tr>
-                  {['البرنامج', 'المدة', 'السعر', 'النشر', ''].map((header) => (
-                    <th key={header || 'actions'} className="px-4 py-3 font-medium">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((item) => {
-                  const image = mediaUrl(item.image_path)
-                  return (
-                    <tr key={item.id} className="border-t border-line hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          {image ? <img src={image} alt="" className="h-12 w-16 rounded-lg object-cover" /> : <span className="h-12 w-16 rounded-lg bg-slate-100" />}
-                          <div>
-                            <p className="font-medium text-navy">{item.title}</p>
-                            <p className="mt-1 line-clamp-1 text-xs text-muted">{item.hotel_info || 'بدون تفاصيل فندق'}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3" dir="ltr">{item.duration_days.toLocaleString('en-GB')} days</td>
-                      <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{englishAmount(item.price_sar)}</td>
-                      <td className="px-4 py-3">
-                        <PublishSwitch
-                          on={item.is_published}
-                          disabled={publishingId === item.id}
-                          onToggle={() => togglePublished(item)}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <Link to={`/umrah/${item.id}/edit`} aria-label="تعديل" className="rounded-lg p-2 text-navy hover:bg-slate-100">
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                          {confirmId === item.id ? (
-                            <>
-                              <button
-                                type="button"
-                                aria-label="تأكيد الحذف"
-                                disabled={pendingId === item.id}
-                                onClick={() => remove(item.id)}
-                                className="rounded-lg px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-60"
-                              >
-                                {pendingId === item.id ? '...' : 'حذف'}
-                              </button>
-                              <button type="button" aria-label="تراجع" onClick={() => setConfirmId(null)} className="rounded-lg p-2 text-muted hover:bg-slate-100">
-                                <X className="h-4 w-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <button type="button" aria-label="حذف" onClick={() => setConfirmId(item.id)} className="rounded-lg p-2 text-rose-700 hover:bg-rose-50">
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </DataShell>
+      {loading ? <DataShell><LoadingState plain /></DataShell> : null}
+      {!loading && !error && rows.length === 0 ? <DataShell><EmptyState title="لا توجد برامج عمرة" body="أضف أول برنامج ثم انشره عندما يجهز." /></DataShell> : null}
+      {!loading && rows.length > 0 ? (
+        <div className="grid items-stretch gap-5 sm:grid-cols-2">
+          {rows.map((item) => {
+            const image = mediaUrl(item.image_path)
+            const copy = cardCopy(item)
+            return (
+              <article key={item.id} className="flex h-full flex-col rounded-[28px] border border-[#ece7df] bg-white p-3 shadow-[0_10px_30px_rgba(15,23,42,0.06)]">
+                <div className="relative h-44 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
+                  {image ? (
+                    <img src={image} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="flex h-full items-center justify-center bg-gold-soft text-navy">
+                      <MoonStar className="h-8 w-8" aria-hidden="true" />
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col px-3 pb-2 pt-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-xl font-bold text-navy">{item.title}</h3>
+                      <p className="mt-1 truncate text-sm text-muted">{copy.subtitle}</p>
+                    </div>
+                    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f8f1e4] text-[#b0893e]">
+                      <Plane className="h-5 w-5" aria-hidden="true" />
+                    </span>
+                  </div>
+                  {copy.body ? <p className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{copy.body}</p> : null}
+                  <dl className="mt-4 grid grid-cols-2 rounded-2xl bg-[#fbf7f1] py-3">
+                    <div className="px-4">
+                      <dt className="flex items-center justify-end gap-1.5 text-xs text-slate-500">
+                        المدة
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white text-[#b0893e]">
+                          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                      </dt>
+                      <dd className="mt-2 text-end text-2xl font-bold text-navy">
+                        <span dir="ltr">{item.duration_days.toLocaleString('en-GB')}</span>
+                        <span className="ms-1 text-base font-semibold">أيام</span>
+                      </dd>
+                    </div>
+                    <div className="border-s border-[#eadfcd] px-4">
+                      <dt className="flex items-center justify-end gap-1.5 text-xs text-slate-500">
+                        السعر
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white text-[#b0893e]">
+                          <Banknote className="h-3.5 w-3.5" aria-hidden="true" />
+                        </span>
+                      </dt>
+                      <dd className="mt-2 text-end text-2xl font-bold tabular-nums text-navy" dir="ltr">{englishAmount(item.price_sar)} SAR</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-4 flex items-center justify-between gap-2">
+                    <PublishSwitch
+                      on={item.is_published}
+                      disabled={publishingId === item.id}
+                      onToggle={() => togglePublished(item)}
+                    />
+                    <div className="flex items-center gap-2">
+                      <Link to={`/umrah/${item.id}/edit`} className="inline-flex items-center gap-1.5 rounded-xl border border-line bg-white px-3 py-2 text-sm font-medium text-navy hover:bg-slate-50">
+                        <Pencil className="h-4 w-4" />
+                        تعديل
+                      </Link>
+                      {confirmId === item.id ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={pendingId === item.id}
+                            onClick={() => remove(item.id)}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600 disabled:opacity-60"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {pendingId === item.id ? '...' : 'تأكيد'}
+                          </button>
+                          <button type="button" aria-label="تراجع" onClick={() => setConfirmId(null)} className="rounded-xl p-2 text-muted hover:bg-slate-100">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" onClick={() => setConfirmId(item.id)} className="inline-flex items-center gap-1.5 rounded-xl bg-rose-50 px-3 py-2 text-sm font-medium text-rose-600">
+                          <Trash2 className="h-4 w-4" />
+                          حذف
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      ) : null}
     </div>
   )
+}
+
+function cardCopy(item: PackageRow) {
+  const hotel = item.hotel_info.trim()
+  const transport = item.transportation.trim()
+  const description = item.description.trim()
+  const subtitle = hotel || transport || 'برنامج عمرة'
+  const body = description && description !== subtitle ? description : ''
+  return { subtitle, body }
 }
 
 function PublishSwitch({ on, disabled, onToggle }: { on: boolean; disabled: boolean; onToggle: () => void }) {
@@ -154,13 +183,14 @@ function PublishSwitch({ on, disabled, onToggle }: { on: boolean; disabled: bool
       aria-label={on ? 'منشور' : 'غير منشور'}
       disabled={disabled}
       onClick={onToggle}
-      className="inline-flex items-center gap-2.5 rounded-full disabled:opacity-60"
+      className="inline-flex items-center gap-2.5 text-right disabled:opacity-60"
     >
-      <span dir="ltr" className={cx('relative h-6 w-11 shrink-0 rounded-full p-0.5 transition-colors duration-200', on ? 'bg-emerald-500' : 'bg-slate-200 ring-1 ring-inset ring-slate-300')}>
-        <span className={cx('block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out', on ? 'translate-x-5' : 'translate-x-0')} />
+      <span dir="ltr" className={cx('relative h-7 w-12 shrink-0 rounded-full p-0.5 transition-colors duration-200', on ? 'bg-emerald-500' : 'bg-slate-200')}>
+        <span className={cx('block h-6 w-6 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out', on ? 'translate-x-5' : 'translate-x-0')} />
       </span>
-      <span className={cx('whitespace-nowrap text-xs font-medium', on ? 'text-emerald-700' : 'text-slate-500')}>
-        {on ? 'منشور' : 'غير منشور'}
+      <span>
+        <span className={cx('block text-sm font-semibold', on ? 'text-emerald-600' : 'text-slate-500')}>{on ? 'منشور' : 'مغلق'}</span>
+        <span className="block text-[11px] text-slate-400">إظهار البرنامج في الموقع</span>
       </span>
     </button>
   )

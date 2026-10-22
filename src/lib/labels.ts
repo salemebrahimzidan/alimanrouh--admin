@@ -82,7 +82,8 @@ const contentKindLabels: Record<ContentKind, string> = {
 
 const auditActionLabels: Record<string, string> = {
   'profile.account_status': 'تغيير حالة الحساب',
-  'booking.created': 'إنشاء حجز',
+  'client.created': 'عميل جديد',
+  'booking.created': 'حجز جديد',
   'booking.status_change': 'تغيير حالة حجز',
   'booking.client_note': 'ملاحظة للعميل',
   'visa.created': 'إنشاء طلب تأشيرة',

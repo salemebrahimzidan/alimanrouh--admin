@@ -1,36 +1,15 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useAuth } from '../../auth/AuthProvider'
-import { listAuditLogs, type AuditRow } from '../../lib/api'
 import { agencyName } from '../../lib/config'
-import { errorText, formatDateTime } from '../../lib/format'
-import { label } from '../../lib/labels'
+import { errorText } from '../../lib/format'
 import { updatePassword } from '../../lib/portal'
-import { Button, Card, ErrorBanner, LoadingState, PageHeader, TextField } from '../../components/ui'
+import { Button, Card, ErrorBanner, PageHeader, TextField } from '../../components/ui'
 
 export function SettingsPage() {
   const { session } = useAuth()
-  const [logs, setLogs] = useState<AuditRow[]>([])
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let active = true
-    listAuditLogs()
-      .then((rows) => {
-        if (active) setLogs(rows)
-      })
-      .catch((err: unknown) => {
-        if (active) setError(errorText(err))
-      })
-      .finally(() => {
-        if (active) setLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -62,7 +41,7 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="الإعدادات" description="حساب الإدارة الحالي وسجل العمليات المهمة. لا توجد إدارة موظفين أو أدوار." />
+      <PageHeader title="الإعدادات" description="حساب الإدارة الحالي. لا توجد إدارة موظفين أو أدوار." />
       {error ? <div className="mb-4"><ErrorBanner message={error} /></div> : null}
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
@@ -95,21 +74,6 @@ export function SettingsPage() {
           </form>
         </Card>
       </div>
-      <Card className="mt-6">
-        <h3 className="font-semibold text-navy">سجل التدقيق</h3>
-        {loading ? <LoadingState plain /> : null}
-        {!loading && !error && logs.length === 0 ? <p className="mt-3 text-sm text-muted">لا توجد عمليات مسجلة بعد.</p> : null}
-        {!loading && logs.length > 0 ? (
-          <ul className="mt-4 divide-y divide-line">
-            {logs.map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                <span>{label.audit(item.action)}</span>
-                <span className="text-xs text-muted">{formatDateTime(item.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </Card>
     </div>
   )
 }
