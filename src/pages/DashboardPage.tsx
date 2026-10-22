@@ -36,21 +36,26 @@ export function DashboardPage() {
   }, [])
 
   const today = useMemo(() => new Date(), [])
+  const todayParts = useMemo(() => dateParts(today), [today])
 
   return (
-    <div className="space-y-6 lg:w-4/5">
+    <div className="space-y-6">
       <section className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-navy">مرحباً بك في لوحة التحكم</h2>
           <p className="mt-1 text-sm text-muted">نظرة عامة على نشاط {agencyName} اليوم</p>
         </div>
-        <div className="flex items-center gap-3 rounded-2xl border border-line bg-white px-4 py-3 shadow-sm">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-navy">
-            <CalendarDays className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-sm font-medium text-navy">{longDate(today)}</p>
-            <p className="mt-0.5 text-xs text-muted">{hijriDate(today)}</p>
+        <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-line bg-white py-2.5 pe-4 ps-2.5 shadow-sm">
+          <div className="flex h-14 w-14 flex-col items-center justify-center rounded-xl bg-navy text-white">
+            <CalendarDays className="h-3.5 w-3.5 text-gold" aria-hidden="true" />
+            <span className="mt-0.5 text-xl font-semibold leading-none tabular-nums" dir="ltr">{todayParts.day}</span>
+          </div>
+          <div className="whitespace-nowrap">
+            <p className="text-sm font-semibold text-navy">{todayParts.weekday}</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {todayParts.month} <span dir="ltr">{todayParts.year}</span>
+            </p>
+            <p className="text-xs text-muted">{hijriDate(today)}</p>
           </div>
         </div>
       </section>
@@ -445,14 +450,16 @@ function statNumber(value: number) {
   return new Intl.NumberFormat('ar-SA', { numberingSystem: 'latn' }).format(value)
 }
 
-function longDate(date: Date) {
-  return new Intl.DateTimeFormat('ar-SA', {
+function dateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat('ar-SA', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
     numberingSystem: 'latn',
-  }).format(date)
+  }).formatToParts(date)
+  const pick = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? ''
+  return { weekday: pick('weekday'), day: pick('day'), month: pick('month'), year: pick('year') }
 }
 
 function hijriDate(date: Date) {

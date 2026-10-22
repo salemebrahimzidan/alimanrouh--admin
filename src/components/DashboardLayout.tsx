@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { agencyName } from '../lib/config'
+import { NotificationBell, NotificationsProvider } from './Notifications'
 import { cx } from './ui'
 
 const items = [
@@ -46,6 +47,7 @@ export function DashboardLayout() {
   }
 
   return (
+    <NotificationsProvider>
     <div className="min-h-screen bg-canvas text-ink">
       {open ? <button className="fixed inset-0 z-30 bg-navy/40 lg:hidden" aria-label="إغلاق القائمة" onClick={() => setOpen(false)} /> : null}
       <aside
@@ -59,8 +61,11 @@ export function DashboardLayout() {
             <span className="flex h-11 w-11 items-center justify-center rounded-full border border-gold text-gold">
               <MoonStar className="h-5 w-5" />
             </span>
-            <div>
-              <p className="text-xs text-gold">لوحة الإدارة</p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-gold">لوحة الإدارة</p>
+                <NotificationBell />
+              </div>
               <h1 className="mt-1 text-sm font-semibold leading-6">{agencyName}</h1>
             </div>
           </div>
@@ -102,5 +107,6 @@ export function DashboardLayout() {
         </main>
       </div>
     </div>
+    </NotificationsProvider>
   )
 }

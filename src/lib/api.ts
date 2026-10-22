@@ -1,5 +1,6 @@
 import { pageSize } from './config'
-import { asNumber, ilikeOr, pageRange } from './format'
+import { asNumber, englishAmount, ilikeOr, pageRange } from './format'
+import { readCopy, normalizeCopy, validateCopy, type SectionCopy, type SiteSectionId } from './site-copy'
 import type {
   AccountStatus,
   BookingStatus,
@@ -190,6 +191,7 @@ export type AuditRow = {
   entity_type: string
   entity_id: string | null
   created_at: string
+  detail?: string
 }
 
 export type PaymentSummary = {
@@ -874,6 +876,19 @@ export async function deleteContent(id: string) {
   unwrap(await db().from('website_content').delete().eq('id', id))
 }
 
+export async function loadSiteSection(section: SiteSectionId) {
+  const { data, error } = await db().from('site_settings').select('content').eq('section', section).maybeSingle()
+  if (error) throw new Error(error.message)
+  return readCopy(section, asRecord(data).content)
+}
+
+export async function saveSiteSection(section: SiteSectionId, copy: SectionCopy) {
+  const problem = validateCopy(section, copy)
+  if (problem) throw new Error(problem)
+  const content = normalizeCopy(section, copy)
+  unwrap(await db().from('site_settings').upsert({ section, content }, { onConflict: 'section' }))
+}
+
 export async function listAuditLogs() {
   const { data, error } = await db()
     .from('audit_logs')
@@ -891,6 +906,83 @@ export async function listAuditLogs() {
       created_at: asText(row.created_at),
     } satisfies AuditRow
   })
+}
+
+export async function listNotifications() {
+  const limit = 100
+  const [customers, bookings, visas, inquiries, payments] = await Promise.all([
+    db().from('customers').select('id, full_name, mobile, created_at').order('created_at', { ascending: false }).limit(limit),
+    db().from('booking_rows').select('id, reference, customer_name, created_at').order('created_at', { ascending: false }).limit(limit),
+    db().from('visa_rows').select('id, reference, full_name, customer_name, created_at').order('created_at', { ascending: false }).limit(limit),
+    db().from('hajj_inquiry_rows').select('id, customer_name, program_title, created_at').order('created_at', { ascending: false }).limit(limit),
+    db().from('payments').select('id, amount, status, created_at, profiles!payments_customer_id_fkey(full_name)').order('created_at', { ascending: false }).limit(limit),
+  ])
+  for (const result of [customers, bookings, visas, inquiries, payments]) {
+    if (result.error) throw new Error(result.error.message)
+  }
+  const rows: AuditRow[] = []
+  for (const item of customers.data ?? []) {
+    const row = asRecord(item)
+    const id = asText(row.id)
+    rows.push({
+      id: `client:${id}`,
+      action: 'client.created',
+      entity_type: 'profile',
+      entity_id: id,
+      created_at: asText(row.created_at),
+      detail: asText(row.full_name) || asText(row.mobile),
+    })
+  }
+  for (const item of bookings.data ?? []) {
+    const row = asRecord(item)
+    const id = asText(row.id)
+    rows.push({
+      id: `booking:${id}`,
+      action: 'booking.created',
+      entity_type: 'booking',
+      entity_id: id,
+      created_at: asText(row.created_at),
+      detail: [asText(row.reference), asText(row.customer_name)].filter(Boolean).join(' · '),
+    })
+  }
+  for (const item of visas.data ?? []) {
+    const row = asRecord(item)
+    const id = asText(row.id)
+    rows.push({
+      id: `visa:${id}`,
+      action: 'visa.created',
+      entity_type: 'visa_application',
+      entity_id: id,
+      created_at: asText(row.created_at),
+      detail: [asText(row.reference), asText(row.full_name) || asText(row.customer_name)].filter(Boolean).join(' · '),
+    })
+  }
+  for (const item of inquiries.data ?? []) {
+    const row = asRecord(item)
+    const id = asText(row.id)
+    rows.push({
+      id: `inquiry:${id}`,
+      action: 'inquiry.created',
+      entity_type: 'hajj_inquiry',
+      entity_id: id,
+      created_at: asText(row.created_at),
+      detail: [asText(row.customer_name), asText(row.program_title)].filter(Boolean).join(' · '),
+    })
+  }
+  for (const item of payments.data ?? []) {
+    const row = asRecord(item)
+    const id = asText(row.id)
+    const status = asText(row.status)
+    rows.push({
+      id: `payment:${id}`,
+      action: status === 'void' ? 'payment.voided' : 'payment.recorded',
+      entity_type: 'payment',
+      entity_id: id,
+      created_at: asText(row.created_at),
+      detail: [embeddedText(row.profiles, 'full_name'), englishAmount(asNumber(row.amount))].filter(Boolean).join(' · '),
+    })
+  }
+  return rows.sort((a, b) => b.created_at.localeCompare(a.created_at))
 }
 
 async function createdSince(table: string, since: string, column?: string, value?: string) {
