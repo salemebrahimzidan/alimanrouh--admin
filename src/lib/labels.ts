@@ -149,6 +149,14 @@ export function visaTone(status: string): Tone {
   return 'neutral'
 }
 
+const inquiryFlow = hajjInquiryStatuses
+
+export function nextInquiryStatus(current: string): HajjInquiryStatus | null {
+  const index = inquiryFlow.indexOf(current as HajjInquiryStatus)
+  if (index < 0 || index >= inquiryFlow.length - 1) return null
+  return inquiryFlow[index + 1] ?? null
+}
+
 export function inquiryTone(status: string): Tone {
   if (status === 'new') return 'warning'
   if (status === 'contacted' || status === 'in_progress') return 'info'

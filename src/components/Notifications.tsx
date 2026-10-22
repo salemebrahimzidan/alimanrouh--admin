@@ -52,7 +52,7 @@ export function notificationPath(item: AuditRow) {
     case 'profile':
       return id ? `/customers/${id}` : '/customers'
     case 'hajj_inquiry':
-      return '/hajj'
+      return id ? `/hajj/inquiries/${id}` : '/hajj/inquiries'
     case 'payment':
       return '/payments'
     case 'umrah_packages':

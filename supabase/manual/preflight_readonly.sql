@@ -73,7 +73,7 @@ from (
       'umrah_packages_public_select', 'umrah_packages_admin_select', 'umrah_packages_insert', 'umrah_packages_update',
       'hajj_programs_public_select', 'hajj_programs_admin_select', 'hajj_programs_insert', 'hajj_programs_update',
       'bookings_select', 'bookings_insert', 'bookings_update', 'booking_history_select',
-      'hajj_inquiries_select', 'hajj_inquiries_insert', 'hajj_inquiries_update',
+      'hajj_inquiries_select', 'hajj_inquiries_insert', 'hajj_inquiries_update', 'hajj_inquiries_delete',
       'visas_select', 'visas_insert', 'visas_update',
       'documents_select', 'documents_insert', 'documents_delete',
       'payments_select', 'payments_insert', 'payments_update',

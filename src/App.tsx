@@ -11,6 +11,7 @@ import { BookingDetailPage } from './pages/bookings/BookingDetailPage'
 import { PackagesPage } from './pages/packages/PackagesPage'
 import { PackageFormPage } from './pages/packages/PackageFormPage'
 import { HajjPage } from './pages/hajj/HajjPage'
+import { InquiryDetailPage } from './pages/hajj/InquiryDetailPage'
 import { HajjProgramFormPage } from './pages/hajj/HajjProgramFormPage'
 import { VisasPage } from './pages/visas/VisasPage'
 import { VisaDetailPage } from './pages/visas/VisaDetailPage'
@@ -37,6 +38,8 @@ export default function App() {
           <Route path="umrah/new" element={<PackageFormPage />} />
           <Route path="umrah/:id/edit" element={<PackageFormPage />} />
           <Route path="hajj" element={<HajjPage />} />
+          <Route path="hajj/inquiries" element={<HajjPage />} />
+          <Route path="hajj/inquiries/:id" element={<InquiryDetailPage />} />
           <Route path="hajj/new" element={<HajjProgramFormPage />} />
           <Route path="hajj/:id/edit" element={<HajjProgramFormPage />} />
           <Route path="visas" element={<VisasPage />} />

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react'
+import { Check, ChevronDown } from 'lucide-react'
 import { deleteContent, listContent, saveContent, uploadPublicImage, type ContentInput, type ContentRow } from '../../lib/api'
 import { errorText } from '../../lib/format'
 import { contentKinds, label, type ContentKind } from '../../lib/labels'
@@ -124,7 +125,8 @@ function MediaManager() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
-  const visible = kind === 'all' ? rows : rows.filter((item) => item.kind === kind)
+  const media = rows.filter((item) => !item.title.startsWith('site:'))
+  const visible = kind === 'all' ? media : media.filter((item) => item.kind === kind)
 
   useEffect(() => {
     let active = true
@@ -181,11 +183,11 @@ function MediaManager() {
                   return (
                     <li key={item.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
                       <div className="flex min-w-0 items-center gap-3">
-                        {image ? <img src={image} alt="" className="h-14 w-20 rounded-lg object-cover" /> : <span className="h-14 w-20 rounded-lg bg-slate-100" />}
+                        {image ? <img src={image} alt="" className="h-14 w-20 rounded-lg object-cover" /> : null}
                         <div className="min-w-0">
                           <p className="truncate font-medium text-navy">{item.title}</p>
                           <p className="mt-1 text-xs text-muted">{label.content(item.kind)} · الترتيب {item.sort_order.toLocaleString('en-GB')}</p>
-                          {item.body ? <p className="mt-1 line-clamp-1 text-xs text-muted">{item.body}</p> : null}
+                          {contentPreview(item.body) ? <p className="mt-1 line-clamp-1 text-xs text-muted">{contentPreview(item.body)}</p> : null}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -205,6 +207,19 @@ function MediaManager() {
   )
 }
 
+function contentPreview(body: string) {
+  const text = body.trim()
+  if (!text.startsWith('{')) return text
+  try {
+    const parsed = JSON.parse(text) as { ar?: unknown; en?: unknown }
+    const arabic = typeof parsed.ar === 'string' ? parsed.ar.trim() : ''
+    const english = typeof parsed.en === 'string' ? parsed.en.trim() : ''
+    return arabic || english
+  } catch {
+    return text
+  }
+}
+
 function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
   return (
     <button
@@ -214,6 +229,81 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
     >
       {children}
     </button>
+  )
+}
+
+function KindMenu({ value, onChange }: { value: ContentKind; onChange: (kind: ContentKind) => void }) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
+
+  useEffect(() => {
+    if (!open) return
+    function onPointer(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [open])
+
+  return (
+    <div ref={rootRef} className="relative">
+      <span className="mb-1.5 block text-sm font-medium text-ink">النوع</span>
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen((current) => !current)}
+        className={cx(
+          'flex h-11 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 text-sm shadow-sm outline-none transition',
+          open ? 'border-gold ring-2 ring-gold/25' : 'border-line hover:border-slate-300',
+        )}
+      >
+        <span className="truncate font-medium text-navy">{label.content(value)}</span>
+        <ChevronDown className={cx('h-4 w-4 shrink-0 text-muted transition', open && 'rotate-180')} />
+      </button>
+      {open ? (
+        <div className="absolute start-0 z-30 mt-2 w-full overflow-hidden rounded-2xl border border-line bg-white p-1.5 shadow-lg">
+          <ul id={listId} role="listbox" aria-label="النوع" className="max-h-80 overflow-auto">
+            {contentKinds.map((item) => {
+              const selected = item === value
+              return (
+                <li key={item}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected}
+                    onClick={() => {
+                      onChange(item)
+                      setOpen(false)
+                    }}
+                    className={cx(
+                      'flex w-full items-start justify-between gap-3 rounded-xl px-3 py-2.5 text-start transition',
+                      selected ? 'bg-slate-50' : 'hover:bg-slate-50',
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className={cx('block text-sm', selected ? 'font-semibold text-navy' : 'font-medium text-ink')}>{label.content(item)}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-muted">{kindHints[item]}</span>
+                    </span>
+                    {selected ? <Check className="mt-0.5 h-4 w-4 shrink-0 text-gold" /> : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
+      ) : null}
+      <span className="mt-1 block text-xs text-muted">{kindHints[value]}</span>
+    </div>
   )
 }
 
@@ -275,13 +365,7 @@ function ContentForm({
     <Card>
       <h3 className="font-semibold text-navy">{initial ? 'تعديل المحتوى' : 'إضافة بنر أو عرض أو إعلان'}</h3>
       <form onSubmit={submit} className="mt-4 space-y-4">
-        <label className="block text-sm font-medium">
-          النوع
-          <select className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" value={kind} onChange={(event) => setKind(event.target.value as ContentKind)}>
-            {contentKinds.map((item) => <option key={item} value={item}>{label.content(item)}</option>)}
-          </select>
-          <span className="mt-1 block text-xs font-normal text-muted">{kindHints[kind]}</span>
-        </label>
+        <KindMenu value={kind} onChange={setKind} />
         <TextField label="العنوان" name="title" defaultValue={initial?.title ?? empty.title} required />
         <TextAreaField label="النص" name="body" rows={4} defaultValue={initial?.body ?? ''} />
         <TextField label="رابط" name="link_url" defaultValue={initial?.link_url ?? ''} placeholder="https://" />
