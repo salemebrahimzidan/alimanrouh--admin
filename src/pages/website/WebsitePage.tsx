@@ -1,7 +1,8 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { deleteContent, listContent, saveContent, uploadPublicImage, type ContentInput, type ContentRow } from '../../lib/api'
 import { errorText } from '../../lib/format'
 import { contentKinds, label, type ContentKind } from '../../lib/labels'
+import { hasUnsavedChanges, shouldWarnOnSectionChange, UNSAVED_CHANGES_MESSAGE } from '../../lib/site-copy-guard'
 import { siteSections, type SiteSectionId } from '../../lib/site-copy'
 import { mediaUrl } from '../../lib/supabase'
 import { Badge, Button, Card, DataShell, EmptyState, ErrorBanner, LoadingState, PageHeader, TextAreaField, TextField, cx } from '../../components/ui'
@@ -30,9 +31,59 @@ const tabs: Array<{ id: SiteSectionId | 'media'; label: string }> = [
   { id: 'media', label: 'البنرات والعروض' },
 ]
 
+function isSectionTab(tab: (typeof tabs)[number]['id']): tab is SiteSectionId {
+  return tab !== 'media'
+}
+
 export function WebsitePage() {
   const [tab, setTab] = useState<(typeof tabs)[number]['id']>('identity')
-  const section = siteSections.find((item) => item.id === tab)
+  const [dirty, setDirty] = useState<Record<SiteSectionId, boolean>>({
+    identity: false,
+    home: false,
+    pages: false,
+  })
+  const onDirtyChange = useCallback((id: SiteSectionId, value: boolean) => {
+    setDirty((current) => (current[id] === value ? current : { ...current, [id]: value }))
+  }, [])
+
+  function selectTab(next: (typeof tabs)[number]['id']) {
+    if (next === tab) return
+    if (isSectionTab(tab) && shouldWarnOnSectionChange(dirty, tab) && !window.confirm(UNSAVED_CHANGES_MESSAGE)) return
+    setTab(next)
+  }
+
+  useEffect(() => {
+    if (!hasUnsavedChanges(dirty)) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    const onClick = (event: MouseEvent) => {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      const element = target instanceof Element ? target : target instanceof Node ? target.parentElement : null
+      const anchor = element?.closest('a[href]')
+      if (!(anchor instanceof HTMLAnchorElement)) return
+      const href = anchor.getAttribute('href')
+      if (!href || href.startsWith('#')) return
+      let url: URL
+      try {
+        url = new URL(anchor.href, window.location.href)
+      } catch {
+        return
+      }
+      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return
+      if (window.confirm(UNSAVED_CHANGES_MESSAGE)) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    document.addEventListener('click', onClick, true)
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      document.removeEventListener('click', onClick, true)
+    }
+  }, [dirty])
 
   return (
     <div>
@@ -49,13 +100,19 @@ export function WebsitePage() {
               'h-10 rounded-full px-4 text-sm font-medium transition',
               tab === item.id ? 'bg-navy text-white' : 'border border-line bg-white text-navy hover:bg-slate-50',
             )}
-            onClick={() => setTab(item.id)}
+            onClick={() => selectTab(item.id)}
           >
             {item.label}
+            {isSectionTab(item.id) && dirty[item.id] ? <span className="ms-2 inline-block h-2 w-2 rounded-full bg-amber-400" aria-label="تغييرات غير محفوظة" /> : null}
           </button>
         ))}
       </div>
-      {section ? <SiteCopyForm key={section.id} section={section} /> : <MediaManager />}
+      {siteSections.map((item) => (
+        <div key={item.id} className={tab === item.id ? undefined : 'hidden'} hidden={tab !== item.id}>
+          <SiteCopyForm section={item} onDirtyChange={onDirtyChange} />
+        </div>
+      ))}
+      {tab === 'media' ? <MediaManager /> : null}
     </div>
   )
 }

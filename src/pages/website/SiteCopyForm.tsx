@@ -2,103 +2,107 @@ import { useEffect, useState } from 'react'
 import { loadSiteSection, saveSiteSection } from '../../lib/api'
 import { errorText } from '../../lib/format'
 import {
-  defaultCopy,
-  normalizeCopy,
-  validateCopy,
+  canPublishSection,
+  isSectionDirty,
+  publishSection,
+  sectionLoadFailed,
+  sectionLoaded,
+  startSectionLoad,
+  withDraftChange,
+  type SectionEditorState,
+} from '../../lib/site-copy-guard'
+import {
   type CopyField,
   type CopyLang,
   type SiteSection,
+  type SiteSectionId,
 } from '../../lib/site-copy'
 import { Button, Card, ErrorBanner, TextAreaField, TextField, cx } from '../../components/ui'
 
-function settingsError(error: unknown) {
-  const message = errorText(error)
-  if (/site_settings|schema cache|does not exist|relation/i.test(message)) {
-    return 'جدول إعدادات الموقع غير جاهز بعد. طبّق ترحيل قاعدة البيانات ثم أعد المحاولة.'
-  }
-  return message
-}
-
-export function SiteCopyForm({ section }: { section: SiteSection }) {
+export function SiteCopyForm({
+  section,
+  onDirtyChange,
+}: {
+  section: SiteSection
+  onDirtyChange: (id: SiteSectionId, dirty: boolean) => void
+}) {
   const [lang, setLang] = useState<CopyLang>('ar')
   const [open, setOpen] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [attempt, setAttempt] = useState(0)
   const [pending, setPending] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [ar, setAr] = useState<Record<string, string>>({})
-  const [en, setEn] = useState<Record<string, string>>({})
+  const [formError, setFormError] = useState<string | null>(null)
+  const [state, setState] = useState<SectionEditorState>(() => startSectionLoad())
+  const dirty = isSectionDirty(state)
 
   useEffect(() => {
     let active = true
-    const fallback = defaultCopy(section.id)
-    setAr(fallback.ar)
-    setEn(fallback.en)
-    setLang('ar')
-    setOpen(0)
+    setState(startSectionLoad())
     setNotice(null)
-    setLoading(true)
+    setFormError(null)
     loadSiteSection(section.id)
       .then((copy) => {
         if (!active) return
-        setAr(copy.ar)
-        setEn(copy.en)
-        setError(null)
+        setState(sectionLoaded(copy))
       })
       .catch((err: unknown) => {
-        if (active) setError(settingsError(err))
-      })
-      .finally(() => {
-        if (active) setLoading(false)
+        if (!active) return
+        setState(sectionLoadFailed(err))
       })
     return () => {
       active = false
     }
-  }, [section.id])
+  }, [section.id, attempt])
+
+  useEffect(() => {
+    onDirtyChange(section.id, dirty)
+    return () => onDirtyChange(section.id, false)
+  }, [dirty, onDirtyChange, section.id])
 
   function value(field: CopyField) {
-    return (field.localized && lang === 'en' ? en[field.id] : ar[field.id]) ?? ''
+    if (!state.draft) return ''
+    return (field.localized && lang === 'en' ? state.draft.en[field.id] : state.draft.ar[field.id]) ?? ''
   }
 
   function update(field: CopyField, next: string) {
     setNotice(null)
-    if (!field.localized || lang === 'ar') {
-      setAr((current) => ({ ...current, [field.id]: next }))
-      if (!field.localized) setEn((current) => ({ ...current, [field.id]: next }))
-      return
-    }
-    setEn((current) => ({ ...current, [field.id]: next }))
+    setState((current) => withDraftChange(current, lang, field.id, next, field.localized))
   }
 
   async function save() {
-    const copy = { ar, en }
-    const problem = validateCopy(section.id, copy)
-    if (problem) {
-      setError(problem)
+    const result = publishSection(section.id, state)
+    if (!result) return
+    if (!result.ok) {
+      setFormError(result.error)
       setNotice(null)
       return
     }
     setPending(true)
-    setError(null)
+    setFormError(null)
     try {
-      const clean = normalizeCopy(section.id, copy)
-      await saveSiteSection(section.id, clean)
-      setAr(clean.ar)
-      setEn(clean.en)
+      await saveSiteSection(result.row.section, result.row.content)
+      setState(sectionLoaded(result.row.content))
       setNotice('تم الحفظ. يظهر النص في الموقع الرسمي مباشرة.')
     } catch (err) {
-      setError(settingsError(err))
+      const message = errorText(err)
+      const raw = err instanceof Error ? err.message : ''
+      setFormError(message && message !== raw ? message : 'تعذر حفظ هذا القسم. المحتوى المنشور لم يتغير.')
     } finally {
       setPending(false)
     }
   }
+
+  const ready = canPublishSection(state)
 
   return (
     <div className="space-y-4">
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h3 className="font-semibold text-navy">{section.title}</h3>
+            <h3 className="font-semibold text-navy">
+              {section.title}
+              {dirty ? <span className="ms-2 text-sm font-medium text-amber-800">تغييرات غير محفوظة</span> : null}
+            </h3>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-muted">{section.description}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -114,16 +118,24 @@ export function SiteCopyForm({ section }: { section: SiteSection }) {
                 </button>
               ))}
             </div>
-            <Button disabled={loading || pending} onClick={() => void save()}>
+            <Button disabled={!ready || pending} onClick={() => void save()}>
               {pending ? 'جارٍ الحفظ...' : 'حفظ ونشر'}
             </Button>
           </div>
         </div>
-        {error ? <div className="mt-4"><ErrorBanner message={error} /></div> : null}
+        {formError ? <div className="mt-4"><ErrorBanner message={formError} /></div> : null}
+        {state.status === 'error' && state.error ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <ErrorBanner message={state.error} />
+            <Button variant="secondary" onClick={() => setAttempt((current) => current + 1)}>
+              إعادة المحاولة
+            </Button>
+          </div>
+        ) : null}
         {notice ? <p className="mt-4 text-sm text-emerald-800">{notice}</p> : null}
       </Card>
-      {loading ? <Card><p className="text-sm text-muted">جارٍ تحميل النصوص الحالية...</p></Card> : null}
-      {!loading ? section.groups.map((group, index) => {
+      {state.status === 'loading' ? <Card><p className="text-sm text-muted">جارٍ تحميل النصوص الحالية...</p></Card> : null}
+      {ready ? section.groups.map((group, index) => {
         const expanded = open === index
         return (
           <Card key={group.title}>
