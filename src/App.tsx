@@ -1,4 +1,5 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import { RequireAdmin } from './auth/RequireAdmin'
 import { DashboardLayout } from './components/DashboardLayout'
 import { LoginPage } from './pages/LoginPage'
@@ -11,7 +12,8 @@ import { BookingDetailPage } from './pages/bookings/BookingDetailPage'
 import { PackagesPage } from './pages/packages/PackagesPage'
 import { PackageFormPage } from './pages/packages/PackageFormPage'
 import { HajjPage } from './pages/hajj/HajjPage'
-import { InquiryDetailPage } from './pages/hajj/InquiryDetailPage'
+import { SupportInboxPage } from './pages/SupportInboxPage'
+import { getSupportConversationForLegacyInquiry } from './lib/api'
 import { HajjProgramFormPage } from './pages/hajj/HajjProgramFormPage'
 import { VisasPage } from './pages/visas/VisasPage'
 import { VisaDetailPage } from './pages/visas/VisaDetailPage'
@@ -38,8 +40,9 @@ export default function App() {
           <Route path="umrah/new" element={<PackageFormPage />} />
           <Route path="umrah/:id/edit" element={<PackageFormPage />} />
           <Route path="hajj" element={<HajjPage />} />
-          <Route path="hajj/inquiries" element={<HajjPage />} />
-          <Route path="hajj/inquiries/:id" element={<InquiryDetailPage />} />
+          <Route path="inquiries" element={<SupportInboxPage />} />
+          <Route path="hajj/inquiries" element={<Navigate to="/inquiries" replace />} />
+          <Route path="hajj/inquiries/:id" element={<LegacyInquiryRedirect />} />
           <Route path="hajj/new" element={<HajjProgramFormPage />} />
           <Route path="hajj/:id/edit" element={<HajjProgramFormPage />} />
           <Route path="visas" element={<VisasPage />} />
@@ -53,4 +56,30 @@ export default function App() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )
+}
+
+function LegacyInquiryRedirect() {
+  const { id = '' } = useParams()
+  const navigate = useNavigate()
+  const [error, setError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    getSupportConversationForLegacyInquiry(id)
+      .then((conversationId) => {
+        if (!active) return
+        const query = conversationId ? `?conversation=${encodeURIComponent(conversationId)}` : ''
+        navigate(`/inquiries${query}`, { replace: true })
+      })
+      .catch(() => { if (active) setError(true) })
+    return () => {
+      active = false
+    }
+  }, [id, navigate])
+
+  return error ? (
+    <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+      تعذّر فتح الاستفسار القديم. <Link className="font-semibold underline" to="/inquiries">العودة إلى صندوق الاستفسارات</Link>
+    </div>
+  ) : null
 }

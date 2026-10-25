@@ -91,6 +91,7 @@ const auditActionLabels: Record<string, string> = {
   'visa.client_note': 'ملاحظة للعميل على طلب تأشيرة',
   'hajj_inquiry.created': 'استفسار حج جديد',
   'hajj_inquiry.status_change': 'تغيير حالة استفسار',
+  'support.conversation.updated': 'رسالة جديدة في الاستفسارات',
   'payment.recorded': 'تسجيل دفعة',
   'payment.voided': 'إلغاء قيد دفعة',
   'umrah_packages.publication': 'نشر برنامج عمرة',

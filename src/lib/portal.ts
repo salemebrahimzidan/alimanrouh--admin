@@ -1,5 +1,6 @@
 import { asNumber } from './format'
 import { db } from './supabase'
+import type { SupportConversationRow, SupportMessageRow } from './api'
 
 export type OwnProfile = {
   id: string
@@ -113,18 +114,60 @@ export async function createVisa(input: {
   if (error) throw new Error(error.message)
 }
 
-export async function createHajjInquiry(input: {
-  userId: string
-  programId: string | null
-  travelers: number
-  message: string
+export async function createCustomerSupportConversation(input: {
+  subject: string
+  body: string
+  topic: string
+  context: string | null
 }) {
-  const { error } = await db().from('hajj_inquiries').insert({
-    customer_id: input.userId,
-    program_id: input.programId,
-    travelers_count: input.travelers,
-    message: input.message.trim(),
-    internal_status: 'new',
+  const { data, error } = await db().rpc('support_create_registered_conversation', {
+    p_subject: input.subject,
+    p_body: input.body.trim(),
+    p_topic: input.topic,
+    p_context: input.context,
+  })
+  if (error) throw new Error(error.message)
+  return String(data)
+}
+
+export async function listCustomerSupportConversations(): Promise<SupportConversationRow[]> {
+  const { data, error } = await db()
+    .from('support_conversations')
+    .select('id, customer_id, guest_name, guest_email, guest_phone, subject, topic, context, status, last_message, last_message_at, last_message_sender, admin_unread_count, customer_unread_count, linked_hajj_inquiry_id, created_at, updated_at')
+    .order('last_message_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({
+    ...row,
+    customer_name: null,
+    customer_mobile: null,
+    customer_email: null,
+    status: row.status as SupportConversationRow['status'],
+    last_message_sender: row.last_message_sender as SupportConversationRow['last_message_sender'],
+  }))
+}
+
+export async function listCustomerSupportMessages(conversationId: string): Promise<SupportMessageRow[]> {
+  const { data, error } = await db()
+    .from('support_messages')
+    .select('id, conversation_id, sender, author_user_id, body, read_at, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map((row) => ({
+    ...row,
+    sender: row.sender as SupportMessageRow['sender'],
+  }))
+}
+
+export async function sendCustomerSupportReply(conversationId: string, body: string) {
+  const { data, error: authError } = await db().auth.getUser()
+  if (authError) throw new Error(authError.message)
+  if (!data.user) throw new Error('A customer session is required.')
+  const { error } = await db().from('support_messages').insert({
+    conversation_id: conversationId,
+    sender: 'customer',
+    author_user_id: data.user.id,
+    body: body.trim(),
   })
   if (error) throw new Error(error.message)
 }

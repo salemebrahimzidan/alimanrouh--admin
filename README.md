@@ -1,6 +1,6 @@
 # لوحة إدارة وكالة الإيمان روح للحج والعمرة
 
-Arabic RTL admin dashboard for [alimanrouh.com](https://alimanrouh.com). The public website is a separate repository and is not modified here.
+Arabic RTL admin dashboard for [alimanrouh.com](https://alimanrouh.com). The website is maintained in a separate repository; its customer inquiry forms now use the same local support-conversation implementation.
 
 Production admin host: `https://admin.alimanrouh.com`  
 Supabase project: `https://ptjtiexrgwjomvaefouo.supabase.co`
@@ -9,7 +9,7 @@ Supabase project: `https://ptjtiexrgwjomvaefouo.supabase.co`
 
 - Admin login for one manually created account. There is no public admin registration and no staff or role screen.
 - Customer list fed by a database trigger on Supabase Auth. A customer appears after registration even when they have no booking.
-- Umrah bookings, Umrah packages, Hajj programs and inquiries, visa applications, manual payments, and website banners/offers/announcements.
+- Umrah bookings, Umrah packages, Hajj programs, a real-time customer support inbox, visa applications, manual payments, and website banners/offers/announcements.
 - A customer portal used for local integration testing. It is enabled in `npm run dev` and hidden in the production build unless `VITE_ENABLE_CUSTOMER_PORTAL=true`.
 - SQL migrations, row level security, a reviewed profile backfill, and the admin bootstrap script. Nothing in this repository executes that SQL.
 
@@ -64,7 +64,7 @@ npm run build
 
 ## Publish the admin dashboard
 
-Do this before changing alimanrouh.com. Nothing in the app runs SQL, and this repository does not commit, push, or deploy by itself.
+Production publishing requires separate approval. This app does not run SQL, commit, push, or deploy by itself.
 
 1. Keep `.env.local` untracked. `.env.example` names `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` only. Put the anon key in `.env.local` and in Vercel, never in Git. Do not add the service-role key.
 2. Push `main` to `https://github.com/salemebrahimzidan/alimanrouh--admin.git`.
@@ -88,7 +88,7 @@ The public-site sequence is in `docs/public-website-integration.md`.
 - `public.is_admin()` reads that table as a security-definer function. Signup metadata is ignored.
 - `handle_new_user()` creates `public.profiles` from Auth. Clients cannot insert profiles directly.
 - The `customers` view excludes administrator accounts and is `security_invoker`, so row level security still applies.
-- Customers can read and create only their own bookings, visa applications, inquiries, and documents.
+- Customers can read and create only their own bookings, visa applications, support conversations, and documents.
 - Package price and booking total for a customer insert are taken from the published package inside the database.
 - Internal notes, audit logs, and customer documents are not public. Documents use a private storage bucket and short-lived signed URLs.
 - Visa and Hajj statuses are internal agency states. They are not official government decisions.
