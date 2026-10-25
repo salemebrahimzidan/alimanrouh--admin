@@ -21,6 +21,17 @@ export type CustomerRow = {
   bookings_count: number
 }
 
+export type BookingCustomerRow = {
+  customer_id: string
+  customer_name: string
+  customer_mobile: string
+  customer_email: string | null
+  bookings_count: number
+  latest_created_at: string
+  latest_status: string
+  latest_reference: string
+}
+
 export type BookingRow = {
   id: string
   reference: string
@@ -129,6 +140,17 @@ export type SupportMessageRow = {
   body: string
   read_at: string | null
   created_at: string
+}
+
+export type VisaCustomerRow = {
+  customer_id: string
+  customer_name: string
+  customer_mobile: string
+  customer_email: string | null
+  visas_count: number
+  latest_created_at: string
+  latest_status: string
+  latest_reference: string
 }
 
 export type VisaRow = {
@@ -484,7 +506,7 @@ export async function setAccountStatus(id: string, status: Extract<AccountStatus
   unwrap(await db().rpc('admin_set_account_status', { p_customer_id: id, p_status: status }))
 }
 
-export async function listBookings({ search, status, page }: ListParams) {
+export async function listBookings({ search, status, page, customerId }: ListParams & { customerId?: string }) {
   let query = db()
     .from('booking_rows')
     .select(
@@ -492,6 +514,7 @@ export async function listBookings({ search, status, page }: ListParams) {
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
+  if (customerId) query = query.eq('customer_id', customerId)
   if (status) query = query.eq('status', status)
   const filter = ilikeOr(['reference', 'customer_name', 'customer_mobile', 'customer_email', 'package_title_snapshot'], search)
   if (filter) query = query.or(filter)
@@ -499,6 +522,41 @@ export async function listBookings({ search, status, page }: ListParams) {
   const { data, error, count } = await query.range(from, to)
   if (error) throw new Error(error.message)
   return { rows: (data ?? []).map(mapBooking), total: count ?? 0 }
+}
+
+export async function listBookingCustomers({ search, status, page }: ListParams) {
+  let query = db()
+    .from('booking_rows')
+    .select('id, reference, customer_id, status, created_at, customer_name, customer_mobile, customer_email')
+    .order('created_at', { ascending: false })
+    .limit(1000)
+  if (status) query = query.eq('status', status)
+  const filter = ilikeOr(['reference', 'customer_name', 'customer_mobile', 'customer_email', 'package_title_snapshot'], search)
+  if (filter) query = query.or(filter)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  const groups = new Map<string, BookingCustomerRow>()
+  for (const item of data ?? []) {
+    const row = mapBooking(item)
+    const current = groups.get(row.customer_id)
+    if (!current) {
+      groups.set(row.customer_id, {
+        customer_id: row.customer_id,
+        customer_name: row.customer_name,
+        customer_mobile: row.customer_mobile,
+        customer_email: row.customer_email,
+        bookings_count: 1,
+        latest_created_at: row.created_at,
+        latest_status: row.status,
+        latest_reference: row.reference,
+      })
+      continue
+    }
+    current.bookings_count += 1
+  }
+  const rows = [...groups.values()]
+  const { from, to } = pageRange(page, pageSize)
+  return { rows: rows.slice(from, to + 1), total: rows.length }
 }
 
 export async function listCustomerBookings(customerId: string) {
@@ -644,6 +702,14 @@ export async function deletePackage(id: string) {
   if (error) throw new Error(error.message)
 }
 
+export async function deleteBooking(id: string) {
+  const notes = await db().from('internal_notes').delete().eq('entity_type', 'booking').eq('entity_id', id)
+  if (notes.error) throw new Error(notes.error.message)
+  const { data, error } = await db().from('bookings').delete().eq('id', id).select('id')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('permission denied')
+}
+
 export async function deleteVisa(id: string) {
   const notes = await db().from('internal_notes').delete().eq('entity_type', 'visa_application').eq('entity_id', id)
   if (notes.error) throw new Error(notes.error.message)
@@ -752,7 +818,9 @@ export async function markSupportConversationRead(id: string) {
   unwrap(await db().rpc('support_mark_read', { p_conversation_id: id }))
 }
 
-export async function listVisas({ search, status, page }: ListParams) {
+const visaSearchColumns = ['reference', 'full_name', 'mobile', 'customer_name', 'customer_mobile', 'customer_email', 'nationality']
+
+export async function listVisas({ search, status, page, customerId }: ListParams & { customerId?: string }) {
   let query = db()
     .from('visa_rows')
     .select(
@@ -760,14 +828,51 @@ export async function listVisas({ search, status, page }: ListParams) {
       { count: 'exact' },
     )
     .order('created_at', { ascending: false })
+  if (customerId) query = query.eq('customer_id', customerId)
   if (status === 'under_review' || status === 'processing') query = query.in('status', ['under_review', 'processing'])
   else if (status) query = query.eq('status', status)
-  const filter = ilikeOr(['reference', 'full_name', 'mobile', 'customer_email', 'nationality'], search)
+  const filter = ilikeOr(visaSearchColumns, search)
   if (filter) query = query.or(filter)
   const { from, to } = pageRange(page, pageSize)
   const { data, error, count } = await query.range(from, to)
   if (error) throw new Error(error.message)
   return { rows: (data ?? []).map(mapVisa), total: count ?? 0 }
+}
+
+export async function listVisaCustomers({ search, status, page }: ListParams) {
+  let query = db()
+    .from('visa_rows')
+    .select('id, reference, customer_id, status, created_at, customer_name, customer_mobile, customer_email')
+    .order('created_at', { ascending: false })
+    .limit(1000)
+  if (status === 'under_review' || status === 'processing') query = query.in('status', ['under_review', 'processing'])
+  else if (status) query = query.eq('status', status)
+  const filter = ilikeOr(visaSearchColumns, search)
+  if (filter) query = query.or(filter)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  const groups = new Map<string, VisaCustomerRow>()
+  for (const item of data ?? []) {
+    const row = mapVisa(item)
+    const current = groups.get(row.customer_id)
+    if (!current) {
+      groups.set(row.customer_id, {
+        customer_id: row.customer_id,
+        customer_name: row.customer_name,
+        customer_mobile: row.customer_mobile,
+        customer_email: row.customer_email,
+        visas_count: 1,
+        latest_created_at: row.created_at,
+        latest_status: row.status,
+        latest_reference: row.reference,
+      })
+      continue
+    }
+    current.visas_count += 1
+  }
+  const rows = [...groups.values()]
+  const { from, to } = pageRange(page, pageSize)
+  return { rows: rows.slice(from, to + 1), total: rows.length }
 }
 
 export async function listCustomerVisas(customerId: string) {
@@ -958,6 +1063,12 @@ export async function recordPayment(input: {
 
 export async function voidPayment(id: string) {
   unwrap(await db().from('payments').update({ status: 'void' }).eq('id', id).eq('status', 'recorded'))
+}
+
+export async function deletePayment(id: string) {
+  const { data, error } = await db().from('payments').delete().eq('id', id).select('id')
+  if (error) throw new Error(error.message)
+  if (!data?.length) throw new Error('permission denied')
 }
 
 export async function paymentSummary(): Promise<PaymentSummary> {

@@ -1,19 +1,22 @@
 ﻿import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { deleteVisa, listVisas, type VisaRow } from '../../lib/api'
+import { deleteVisa, listVisaCustomers, listVisas, type VisaCustomerRow, type VisaRow } from '../../lib/api'
 import { pageSize } from '../../lib/config'
-import { displayName, errorText, formatDateTime } from '../../lib/format'
+import { displayName, errorText } from '../../lib/format'
 import { label, visaStatuses, visaTone } from '../../lib/labels'
-import { Badge, Button, DataShell, EmptyState, ErrorBanner, FilterSelect, LoadingState, PageHeader, Pagination, SearchForm } from '../../components/ui'
+import { BackLink, Badge, Button, DataShell, EmptyState, EnglishWhen, ErrorBanner, FilterSelect, LoadingState, PageHeader, Pagination, SearchForm } from '../../components/ui'
 
 export function VisasPage() {
   const [params, setParams] = useSearchParams()
   const search = params.get('q') ?? ''
   const statusParam = params.get('status') ?? ''
   const status = statusParam === 'processing' ? 'under_review' : statusParam
+  const customerId = params.get('customer') ?? ''
   const page = Number(params.get('page') ?? '1') || 1
-  const [rows, setRows] = useState<VisaRow[]>([])
+  const [customers, setCustomers] = useState<VisaCustomerRow[]>([])
+  const [visas, setVisas] = useState<VisaRow[]>([])
+  const [customerName, setCustomerName] = useState('')
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,10 +27,22 @@ export function VisasPage() {
   useEffect(() => {
     let active = true
     setLoading(true)
-    listVisas({ search, status, page })
+    const request = customerId
+      ? listVisas({ search, status, page, customerId })
+      : listVisaCustomers({ search, status, page })
+    request
       .then((result) => {
         if (!active) return
-        setRows(result.rows)
+        if (customerId) {
+          const rows = result.rows as VisaRow[]
+          setVisas(rows)
+          setCustomers([])
+          if (rows[0]) setCustomerName(displayName(rows[0].customer_name))
+        } else {
+          setCustomers(result.rows as VisaCustomerRow[])
+          setVisas([])
+          setCustomerName('')
+        }
         setTotal(result.total)
         setError(null)
       })
@@ -40,7 +55,7 @@ export function VisasPage() {
     return () => {
       active = false
     }
-  }, [page, search, status, version])
+  }, [customerId, page, search, status, version])
 
   useEffect(() => {
     if (!confirm || pendingId) return
@@ -51,15 +66,22 @@ export function VisasPage() {
     return () => window.removeEventListener('keydown', onKey)
   }, [confirm, pendingId])
 
-  function update(next: { q?: string; status?: string; page?: number }) {
+  function update(next: { q?: string; status?: string; page?: number; customer?: string | null }) {
     const query = new URLSearchParams()
     const q = next.q ?? search
     const nextStatus = next.status ?? status
+    const nextCustomer = next.customer === undefined ? customerId : next.customer ?? ''
     const nextPage = next.page ?? 1
     if (q) query.set('q', q)
     if (nextStatus) query.set('status', nextStatus)
+    if (nextCustomer) query.set('customer', nextCustomer)
     if (nextPage > 1) query.set('page', String(nextPage))
     setParams(query)
+  }
+
+  function openCustomer(customer: VisaCustomerRow) {
+    setCustomerName(displayName(customer.customer_name))
+    update({ customer: customer.customer_id, page: 1 })
   }
 
   async function remove(visa: VisaRow) {
@@ -79,13 +101,23 @@ export function VisasPage() {
 
   return (
     <div>
-      <PageHeader title="طلبات التأشيرات" description="متابعة طلبات تأشيرة العمرة التي يرسلها العملاء، مع مستنداتهم وحالتهم الداخلية." />
+      {customerId ? (
+        <BackLink to={backHref(search, status)}>العودة إلى العملاء</BackLink>
+      ) : null}
+      <PageHeader
+        title={customerId ? (customerName || 'طلبات العميل') : 'طلبات التأشيرات'}
+        description={customerId ? 'كل طلبات تأشيرة هذا العميل في جدول واحد.' : 'كل عميل يظهر مرة واحدة. اضغط الاسم لعرض كل طلباته.'}
+      />
       <div className="mb-4 flex flex-wrap gap-3">
-        <SearchForm initial={search} placeholder="المرجع أو الاسم أو الجوال" onSearch={(q) => update({ q })} />
+        <SearchForm
+          initial={search}
+          placeholder={customerId ? 'المرجع أو الاسم أو الجنسية' : 'اسم العميل أو الجوال أو المرجع'}
+          onSearch={(q) => update({ q, customer: customerId || null })}
+        />
         <FilterSelect
           label="حالة الطلب"
           value={status}
-          onChange={(next) => update({ status: next })}
+          onChange={(next) => update({ status: next, customer: customerId || null })}
           options={visaStatuses.filter((item) => item !== 'processing').map((item) => ({
             value: item,
             label: label.visa(item),
@@ -96,24 +128,59 @@ export function VisasPage() {
       {error ? <ErrorBanner message={error} /> : null}
       <DataShell>
         {loading ? <LoadingState plain /> : null}
-        {!loading && !error && rows.length === 0 ? <EmptyState title="لا توجد طلبات" body="ستظهر طلبات التأشيرة هنا عند إرسالها من حساب العميل." /> : null}
-        {!loading && rows.length > 0 ? (
+        {!loading && !error && (customerId ? visas.length === 0 : customers.length === 0) ? (
+          <EmptyState
+            title={customerId ? 'لا توجد طلبات لهذا العميل' : 'لا توجد طلبات'}
+            body={customerId ? 'جرّب حالة أو بحثاً آخر.' : 'ستظهر طلبات التأشيرة هنا عند إرسالها من حساب العميل.'}
+          />
+        ) : null}
+        {!loading && !customerId && customers.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[760px] text-right text-sm">
               <thead className="bg-slate-50 text-muted">
                 <tr>
-                  {['المرجع', 'العميل', 'الجنسية', 'تاريخ الطلب', 'الحالة', ''].map((header) => (
+                  {['العميل', 'الجوال', 'عدد الطلبات', 'آخر طلب', 'الحالة'].map((header) => (
+                    <th key={header} className="px-4 py-3 font-medium">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {customers.map((customer) => (
+                  <tr
+                    key={customer.customer_id}
+                    className="cursor-pointer border-t border-line hover:bg-slate-50"
+                    onClick={() => openCustomer(customer)}
+                  >
+                    <td className="px-4 py-3">
+                      <span className="font-medium text-navy">{displayName(customer.customer_name)}</span>
+                    </td>
+                    <td className="px-4 py-3" dir="ltr">{customer.customer_mobile || '—'}</td>
+                    <td className="px-4 py-3 tabular-nums" dir="ltr">{customer.visas_count.toLocaleString('en-GB')}</td>
+                    <td className="whitespace-nowrap px-4 py-3" dir="ltr"><EnglishWhen value={customer.latest_created_at} /></td>
+                    <td className="px-4 py-3"><Badge tone={visaTone(customer.latest_status)}>{label.visa(customer.latest_status)}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+        {!loading && customerId && visas.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[760px] text-right text-sm">
+              <thead className="bg-slate-50 text-muted">
+                <tr>
+                  {['المرجع', 'الاسم', 'الجنسية', 'تاريخ الطلب', 'الحالة', 'الإجراءات'].map((header) => (
                     <th key={header || 'actions'} className="px-4 py-3 font-medium">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((visa) => (
+                {visas.map((visa) => (
                   <tr key={visa.id} className="border-t border-line hover:bg-slate-50">
                     <td className="px-4 py-3"><Link className="font-medium text-navy" to={`/visas/${visa.id}`}>{visa.reference}</Link></td>
-                    <td className="px-4 py-3">{displayName(visa.customer_name)}</td>
+                    <td className="px-4 py-3">{displayName(visa.full_name)}</td>
                     <td className="px-4 py-3">{visa.nationality}</td>
-                    <td className="px-4 py-3">{formatDateTime(visa.created_at)}</td>
+                    <td className="whitespace-nowrap px-4 py-3" dir="ltr"><EnglishWhen value={visa.created_at} /></td>
                     <td className="px-4 py-3"><Badge tone={visaTone(visa.status)}>{label.visa(visa.status)}</Badge></td>
                     <td className="px-4 py-3">
                       <button
@@ -132,7 +199,14 @@ export function VisasPage() {
             </table>
           </div>
         ) : null}
-        {!loading && !error ? <Pagination page={page} pageSize={pageSize} total={total} onPage={(next) => update({ q: search, status, page: next })} /> : null}
+        {!loading && !error ? (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPage={(next) => update({ page: next, customer: customerId || null })}
+          />
+        ) : null}
       </DataShell>
       {confirm ? (
         <div
@@ -159,4 +233,12 @@ export function VisasPage() {
       ) : null}
     </div>
   )
+}
+
+function backHref(search: string, status: string) {
+  const query = new URLSearchParams()
+  if (search) query.set('q', search)
+  if (status) query.set('status', status)
+  const value = query.toString()
+  return value ? `/visas?${value}` : '/visas'
 }
