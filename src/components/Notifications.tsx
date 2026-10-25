@@ -53,6 +53,8 @@ export function notificationPath(item: AuditRow) {
       return id ? `/customers/${id}` : '/customers'
     case 'hajj_inquiry':
       return id ? `/hajj/inquiries/${id}` : '/hajj/inquiries'
+    case 'support_conversation':
+      return id ? `/inquiries?conversation=${encodeURIComponent(id)}` : '/inquiries'
     case 'payment':
       return '/payments'
     case 'umrah_packages':

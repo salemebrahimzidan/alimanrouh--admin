@@ -55,14 +55,7 @@ export function SettingsPage() {
               <dt className="text-muted">البريد</dt>
               <dd className="mt-1">{session?.user.email}</dd>
             </div>
-            <div>
-              <dt className="text-muted">مشروع Supabase</dt>
-              <dd className="mt-1 break-all">{import.meta.env.VITE_SUPABASE_URL}</dd>
-            </div>
           </dl>
-          <p className="mt-4 text-xs leading-6 text-muted">
-            مفتاح service role غير مستخدم في هذه الواجهة، ولا يجب وضعه في ملفات البيئة الخاصة بها.
-          </p>
         </Card>
         <Card>
           <h3 className="font-semibold text-navy">تغيير كلمة المرور</h3>

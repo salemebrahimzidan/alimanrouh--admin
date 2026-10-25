@@ -1,10 +1,20 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useOutletContext } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
-import { listCustomerBookings, listCustomerVisas, listDocuments, listPublishedHajjPrograms, openDocument } from '../lib/api'
+import { listCustomerBookings, listCustomerVisas, listDocuments, openDocument, type SupportConversationRow, type SupportMessageRow } from '../lib/api'
 import { accountTone, label } from '../lib/labels'
-import { errorText, isMobile } from '../lib/format'
-import { createHajjInquiry, removeOwnDocument, updateOwnProfile, uploadCustomerDocument, type OwnProfile } from '../lib/portal'
+import { errorText, formatDateTime, isMobile } from '../lib/format'
+import {
+  createCustomerSupportConversation,
+  listCustomerSupportConversations,
+  listCustomerSupportMessages,
+  sendCustomerSupportReply,
+  removeOwnDocument,
+  updateOwnProfile,
+  uploadCustomerDocument,
+  type OwnProfile,
+} from '../lib/portal'
+import { db } from '../lib/supabase'
 import { Badge, Button, Card, ErrorBanner, TextAreaField, TextField } from '../components/ui'
 
 export function AccountHomePage() {
@@ -50,21 +60,73 @@ export function AccountHomePage() {
 }
 
 function InquiryForm({ profile }: { profile: OwnProfile }) {
-  const [programs, setPrograms] = useState<Array<{ id: string; title: string }>>([])
-  const [message, setMessage] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<SupportConversationRow[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<SupportMessageRow[]>([])
+  const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState(false)
   const disabled = profile.account_status !== 'active'
+  const selected = conversations.find((item) => item.id === selectedId) ?? null
 
   useEffect(() => {
-    listPublishedHajjPrograms().then((rows) => setPrograms(rows.map((item) => ({ id: item.id, title: item.title })))).catch(() => undefined)
-  }, [])
+    let active = true
+    const refresh = () => listCustomerSupportConversations()
+      .then((rows) => {
+        if (active) setConversations(rows)
+      })
+      .catch((err: unknown) => {
+        if (active) setError(errorText(err))
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    void refresh()
+    const channel = db().channel(`portal-support-${profile.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_conversations', filter: `customer_id=eq.${profile.id}` }, () => void refresh())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, () => void refresh())
+      .subscribe()
+    return () => {
+      active = false
+      void db().removeChannel(channel)
+    }
+  }, [profile.id])
+
+  useEffect(() => {
+    if (!selectedId) {
+      setMessages([])
+      return
+    }
+    let active = true
+    db().rpc('support_mark_read', { p_conversation_id: selectedId }).then(({ error: readError }) => {
+      if (readError && active) setError(readError.message)
+    })
+    listCustomerSupportMessages(selectedId)
+      .then((rows) => {
+        if (active) setMessages(rows)
+      })
+      .catch((err: unknown) => {
+        if (active) setError(errorText(err))
+      })
+    return () => {
+      active = false
+    }
+  }, [selectedId])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const data = new FormData(form)
     const text = String(data.get('message') ?? '').trim()
+    const topic = String(data.get('topic') ?? 'general')
+    const topics: Record<string, string> = {
+      general: 'استفسار عام',
+      hajj: 'استفسار عن الحج',
+      umrah: 'استفسار عن العمرة',
+      booking: 'استفسار عن حجز',
+      complaint: 'شكوى',
+    }
     if (text.length < 5) {
       setError('اكتب رسالة مختصرة عن الاستفسار.')
       return
@@ -72,14 +134,33 @@ function InquiryForm({ profile }: { profile: OwnProfile }) {
     setPending(true)
     setError(null)
     try {
-      await createHajjInquiry({
-        userId: profile.id,
-        programId: String(data.get('program_id') ?? '') || null,
-        travelers: Number(data.get('travelers') ?? 1),
-        message: text,
+      const id = await createCustomerSupportConversation({
+        subject: topics[topic] ?? topics.general,
+        body: text,
+        topic,
+        context: null,
       })
       form.reset()
-      setMessage('تم إرسال الاستفسار، وستتم متابعته داخلياً لدى الوكالة.')
+      const rows = await listCustomerSupportConversations()
+      setConversations(rows)
+      setSelectedId(id)
+    } catch (err) {
+      setError(errorText(err))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function reply(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selected || !draft.trim() || pending) return
+    setPending(true)
+    setError(null)
+    try {
+      await sendCustomerSupportReply(selected.id, draft)
+      setDraft('')
+      setMessages(await listCustomerSupportMessages(selected.id))
+      setConversations(await listCustomerSupportConversations())
     } catch (err) {
       setError(errorText(err))
     } finally {
@@ -88,24 +169,62 @@ function InquiryForm({ profile }: { profile: OwnProfile }) {
   }
 
   return (
-    <Card>
-      <h2 className="font-semibold text-navy">استفسار عن الحج</h2>
-      <p className="mt-1 text-xs leading-6 text-muted">الاستفسار طلب تواصل داخلي، وليس حجزاً أو موافقة رسمية.</p>
-      <form onSubmit={submit} className="mt-4 space-y-4">
-        <label className="block text-sm font-medium">
-          البرنامج
-          <select name="program_id" className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" disabled={disabled}>
-            <option value="">استفسار عام</option>
-            {programs.map((program) => <option key={program.id} value={program.id}>{program.title}</option>)}
-          </select>
-        </label>
-        <TextField label="عدد المسافرين" name="travelers" type="number" min="1" max="100" defaultValue={1} disabled={disabled} />
-        <TextAreaField label="الرسالة" name="message" rows={4} disabled={disabled} />
-        {error ? <ErrorBanner message={error} /> : null}
-        {message ? <p className="text-sm text-emerald-800">{message}</p> : null}
-        <Button type="submit" disabled={pending || disabled}>{pending ? 'جارٍ الإرسال...' : 'إرسال الاستفسار'}</Button>
-      </form>
-    </Card>
+    <div className="space-y-4">
+      <Card>
+        <h2 className="font-semibold text-navy">الاستفسارات والمحادثات</h2>
+        <p className="mt-1 text-xs leading-6 text-muted">أرسل سؤالاً أو شكوى، ثم تابع الردود في المحادثة نفسها.</p>
+        <form onSubmit={submit} className="mt-4 space-y-4">
+          <label className="block text-sm font-medium">
+            نوع الاستفسار
+            <select name="topic" className="mt-1.5 h-11 w-full rounded-lg border border-line px-3" disabled={disabled}>
+              <option value="general">استفسار عام عن الموقع</option>
+              <option value="hajj">الحج</option>
+              <option value="umrah">العمرة</option>
+              <option value="booking">حجز قائم أو استفسار حجز</option>
+              <option value="complaint">شكوى</option>
+            </select>
+          </label>
+          <TextAreaField label="الرسالة" name="message" rows={4} disabled={disabled} />
+          {error ? <ErrorBanner message={error} /> : null}
+          <Button type="submit" disabled={pending || disabled}>{pending ? 'جارٍ الإرسال...' : 'بدء محادثة'}</Button>
+        </form>
+      </Card>
+      <Card>
+        <h3 className="font-semibold text-navy">محادثاتي</h3>
+        {loading ? <p className="mt-3 text-sm text-muted">جارٍ تحميل المحادثات...</p> : conversations.length === 0 ? <p className="mt-3 text-sm text-muted">لا توجد محادثات بعد.</p> : (
+          <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(12rem,0.7fr)_minmax(0,1.3fr)]">
+            <ul className="space-y-2">
+              {conversations.map((item) => (
+                <li key={item.id}>
+                  <button type="button" onClick={() => setSelectedId(item.id)} className={`w-full rounded-lg border px-3 py-2 text-start ${selectedId === item.id ? 'border-gold bg-gold-soft/40' : 'border-line'}`}>
+                    <span className="block font-medium">{item.subject}</span>
+                    <span className="mt-1 block truncate text-xs text-muted">{item.last_message}</span>
+                    {item.customer_unread_count > 0 ? <Badge tone="warning">{item.customer_unread_count} غير مقروء</Badge> : null}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {selected ? (
+              <div className="min-w-0 rounded-xl border border-line">
+                <div className="max-h-80 space-y-3 overflow-y-auto p-3">
+                  <p className="text-xs text-muted">{selected.status === 'resolved' ? 'تم الحل' : selected.status === 'in_progress' ? 'قيد المتابعة' : 'جديد'}</p>
+                  {messages.map((item) => (
+                    <article key={item.id} className={`max-w-[90%] rounded-xl px-3 py-2 ${item.sender === 'admin' ? 'ms-auto bg-navy text-white' : 'me-auto bg-canvas text-ink'}`}>
+                      <p className="whitespace-pre-wrap text-sm">{item.body}</p>
+                      <time className="mt-1 block text-[10px] opacity-70" dir="ltr">{formatDateTime(item.created_at)}</time>
+                    </article>
+                  ))}
+                </div>
+                <form onSubmit={reply} className="flex gap-2 border-t border-line p-3">
+                  <textarea value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={5000} rows={2} placeholder="اكتب ردك..." className="min-w-0 flex-1 rounded-lg border border-line p-2 text-sm" />
+                  <Button type="submit" disabled={pending || !draft.trim()}>إرسال</Button>
+                </form>
+              </div>
+            ) : <p className="text-sm text-muted">اختر محادثة لعرض الرسائل والرد عليها.</p>}
+          </div>
+        )}
+      </Card>
+    </div>
   )
 }
 

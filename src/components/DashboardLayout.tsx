@@ -26,7 +26,7 @@ const items = [
   { to: '/bookings', label: 'الحجوزات', icon: CalendarCheck, end: false },
   { to: '/umrah', label: 'برامج العمرة', icon: MoonStar, end: false },
   { to: '/hajj', label: 'برامج الحج', icon: Landmark, end: false },
-  { to: '/hajj/inquiries', label: 'الاستفسارات والشكاوي', icon: MessageSquare, end: true },
+  { to: '/inquiries', label: 'الاستفسارات', icon: MessageSquare, end: true },
   { to: '/visas', label: 'طلبات التأشيرات', icon: FileText, end: false },
   { to: '/payments', label: 'المدفوعات', icon: Wallet, end: false },
   { to: '/website', label: 'إدارة الموقع', icon: Globe, end: false },
@@ -35,7 +35,6 @@ const items = [
 
 function itemActive(to: string, pathname: string, end: boolean) {
   if (to === '/hajj') return pathname === '/hajj' || (pathname.startsWith('/hajj/') && !pathname.startsWith('/hajj/inquiries'))
-  if (to === '/hajj/inquiries') return pathname === '/hajj/inquiries' || pathname.startsWith('/hajj/inquiries/')
   if (end) return pathname === to
   return pathname === to || pathname.startsWith(`${to}/`)
 }
@@ -80,7 +79,7 @@ export function DashboardLayout() {
           </div>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {items.map((item) => {
+          {items.filter((item) => item.to !== '/inquiries').map((item) => {
             const active = itemActive(item.to, location.pathname, item.end)
             return (
             <Link

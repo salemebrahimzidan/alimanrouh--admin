@@ -5,7 +5,6 @@ import type {
   AccountStatus,
   BookingStatus,
   ContentKind,
-  HajjInquiryStatus,
   HajjProgramStatus,
   PaymentMethod,
   VisaStatus,
@@ -97,18 +96,39 @@ export type HajjProgramInput = {
   is_published: boolean
 }
 
-export type InquiryRow = {
+export type SupportConversationStatus = 'new' | 'in_progress' | 'resolved'
+
+export type SupportConversationRow = {
   id: string
-  customer_id: string
-  program_id: string | null
-  message: string
-  travelers_count: number
-  internal_status: string
-  created_at: string
-  customer_name: string
-  customer_mobile: string
+  customer_id: string | null
+  customer_name: string | null
+  customer_mobile: string | null
   customer_email: string | null
-  program_title: string | null
+  guest_name: string | null
+  guest_email: string | null
+  guest_phone: string | null
+  subject: string
+  topic: string
+  context: string | null
+  status: SupportConversationStatus
+  last_message: string
+  last_message_at: string
+  last_message_sender: 'customer' | 'admin'
+  admin_unread_count: number
+  customer_unread_count: number
+  linked_hajj_inquiry_id: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type SupportMessageRow = {
+  id: string
+  conversation_id: string
+  sender: 'customer' | 'admin'
+  author_user_id: string | null
+  body: string
+  read_at: string | null
+  created_at: string
 }
 
 export type VisaRow = {
@@ -305,20 +325,42 @@ function mapHajjProgram(value: unknown): HajjProgramRow {
   }
 }
 
-function mapInquiry(value: unknown): InquiryRow {
+function mapSupportConversation(value: unknown): SupportConversationRow {
   const row = asRecord(value)
   return {
     id: asText(row.id),
-    customer_id: asText(row.customer_id),
-    program_id: asNullableText(row.program_id),
-    message: asText(row.message),
-    travelers_count: asNumber(row.travelers_count),
-    internal_status: asText(row.internal_status),
+    customer_id: asNullableText(row.customer_id),
+    customer_name: asNullableText(embeddedText(row.profiles, 'full_name')),
+    customer_mobile: asNullableText(embeddedText(row.profiles, 'mobile')),
+    customer_email: asNullableText(embeddedText(row.profiles, 'email')),
+    guest_name: asNullableText(row.guest_name),
+    guest_email: asNullableText(row.guest_email),
+    guest_phone: asNullableText(row.guest_phone),
+    subject: asText(row.subject),
+    topic: asText(row.topic),
+    context: asNullableText(row.context),
+    status: asText(row.status) as SupportConversationStatus,
+    last_message: asText(row.last_message),
+    last_message_at: asText(row.last_message_at),
+    last_message_sender: asText(row.last_message_sender) as SupportMessageRow['sender'],
+    admin_unread_count: asNumber(row.admin_unread_count),
+    customer_unread_count: asNumber(row.customer_unread_count),
+    linked_hajj_inquiry_id: asNullableText(row.linked_hajj_inquiry_id),
     created_at: asText(row.created_at),
-    customer_name: asText(row.customer_name),
-    customer_mobile: asText(row.customer_mobile),
-    customer_email: asNullableText(row.customer_email),
-    program_title: asNullableText(row.program_title),
+    updated_at: asText(row.updated_at),
+  }
+}
+
+function mapSupportMessage(value: unknown): SupportMessageRow {
+  const row = asRecord(value)
+  return {
+    id: asText(row.id),
+    conversation_id: asText(row.conversation_id),
+    sender: asText(row.sender) as SupportMessageRow['sender'],
+    author_user_id: asNullableText(row.author_user_id),
+    body: asText(row.body),
+    read_at: asNullableText(row.read_at),
+    created_at: asText(row.created_at),
   }
 }
 
@@ -657,36 +699,57 @@ export async function setHajjProgramPublished(id: string, isPublished: boolean) 
   if (error) throw new Error(error.message)
 }
 
-export async function listInquiries() {
+export async function listSupportConversations() {
   const { data, error } = await db()
-    .from('hajj_inquiry_rows')
-    .select('id, customer_id, program_id, message, travelers_count, internal_status, created_at, customer_name, customer_mobile, customer_email, program_title')
-    .order('created_at', { ascending: false })
+    .from('support_conversations')
+    .select('id, customer_id, profiles!support_conversations_customer_id_fkey(full_name, mobile, email), guest_name, guest_email, guest_phone, subject, topic, context, status, last_message, last_message_at, last_message_sender, admin_unread_count, customer_unread_count, linked_hajj_inquiry_id, created_at, updated_at')
+    .order('last_message_at', { ascending: false })
   if (error) throw new Error(error.message)
-  return (data ?? []).map(mapInquiry)
+  return (data ?? []).map(mapSupportConversation)
 }
 
-export async function getInquiry(id: string) {
-  const data = unwrap(
-    await db()
-      .from('hajj_inquiry_rows')
-      .select('id, customer_id, program_id, message, travelers_count, internal_status, created_at, customer_name, customer_mobile, customer_email, program_title')
-      .eq('id', id)
-      .maybeSingle(),
-  )
-  return data ? mapInquiry(data) : null
-}
-
-export async function setInquiryStatus(id: string, status: HajjInquiryStatus) {
-  unwrap(await db().from('hajj_inquiries').update({ internal_status: status }).eq('id', id))
-}
-
-export async function deleteInquiry(id: string) {
-  const notes = await db().from('internal_notes').delete().eq('entity_type', 'hajj_inquiry').eq('entity_id', id)
-  if (notes.error) throw new Error(notes.error.message)
-  const { data, error } = await db().from('hajj_inquiries').delete().eq('id', id).select('id')
+export async function getSupportConversationForLegacyInquiry(id: string) {
+  const { data, error } = await db()
+    .from('support_conversations')
+    .select('id')
+    .eq('linked_hajj_inquiry_id', id)
+    .maybeSingle()
   if (error) throw new Error(error.message)
-  if (!data?.length) throw new Error('permission denied')
+  return data?.id ?? null
+}
+
+export async function listSupportMessages(conversationId: string) {
+  const { data, error } = await db()
+    .from('support_messages')
+    .select('id, conversation_id, sender, author_user_id, body, read_at, created_at')
+    .eq('conversation_id', conversationId)
+    .order('created_at', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(mapSupportMessage)
+}
+
+export async function sendSupportReply(conversationId: string, body: string) {
+  const { data, error: authError } = await db().auth.getUser()
+  if (authError) throw new Error(authError.message)
+  if (!data.user) throw new Error('An administrator session is required.')
+  const { error } = await db().from('support_messages').insert({
+    conversation_id: conversationId,
+    sender: 'admin',
+    author_user_id: data.user.id,
+    body: body.trim(),
+  })
+  if (error) throw new Error(error.message)
+}
+
+export async function setSupportConversationStatus(id: string, status: SupportConversationStatus) {
+  unwrap(await db().rpc('support_admin_set_status', {
+    p_conversation_id: id,
+    p_status: status,
+  }))
+}
+
+export async function markSupportConversationRead(id: string) {
+  unwrap(await db().rpc('support_mark_read', { p_conversation_id: id }))
 }
 
 export async function listVisas({ search, status, page }: ListParams) {
@@ -973,14 +1036,14 @@ export async function listAuditLogs() {
 
 export async function listNotifications() {
   const limit = 100
-  const [customers, bookings, visas, inquiries, payments] = await Promise.all([
+  const [customers, bookings, visas, conversations, payments] = await Promise.all([
     db().from('customers').select('id, full_name, mobile, created_at').order('created_at', { ascending: false }).limit(limit),
     db().from('booking_rows').select('id, reference, customer_name, created_at').order('created_at', { ascending: false }).limit(limit),
     db().from('visa_rows').select('id, reference, full_name, customer_name, created_at').order('created_at', { ascending: false }).limit(limit),
-    db().from('hajj_inquiry_rows').select('id, customer_name, program_title, created_at').order('created_at', { ascending: false }).limit(limit),
+    db().from('support_conversations').select('id, subject, last_message, last_message_at').order('last_message_at', { ascending: false }).limit(limit),
     db().from('payments').select('id, amount, status, created_at, profiles!payments_customer_id_fkey(full_name)').order('created_at', { ascending: false }).limit(limit),
   ])
-  for (const result of [customers, bookings, visas, inquiries, payments]) {
+  for (const result of [customers, bookings, visas, conversations, payments]) {
     if (result.error) throw new Error(result.error.message)
   }
   const rows: AuditRow[] = []
@@ -1020,16 +1083,16 @@ export async function listNotifications() {
       detail: [asText(row.reference), asText(row.full_name) || asText(row.customer_name)].filter(Boolean).join(' · '),
     })
   }
-  for (const item of inquiries.data ?? []) {
+  for (const item of conversations.data ?? []) {
     const row = asRecord(item)
     const id = asText(row.id)
     rows.push({
-      id: `inquiry:${id}`,
-      action: 'inquiry.created',
-      entity_type: 'hajj_inquiry',
+      id: `support:${id}`,
+      action: 'support.conversation.updated',
+      entity_type: 'support_conversation',
       entity_id: id,
-      created_at: asText(row.created_at),
-      detail: [asText(row.customer_name), asText(row.program_title)].filter(Boolean).join(' · '),
+      created_at: asText(row.last_message_at),
+      detail: [asText(row.subject), asText(row.last_message)].filter(Boolean).join(' · '),
     })
   }
   for (const item of payments.data ?? []) {
