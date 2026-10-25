@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Banknote, Calendar, Receipt, Search, Wallet, type LucideIcon } from 'lucide-react'
+import { Banknote, Calendar, Receipt, Search, Trash2, Wallet, type LucideIcon } from 'lucide-react'
 import {
   customerBookingsForPayment,
+  deletePayment,
   listCustomers,
   listOutstanding,
   listPayments,
@@ -28,6 +29,8 @@ export function PaymentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
+  const [confirm, setConfirm] = useState<PaymentRow | null>(null)
+  const [pendingId, setPendingId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -51,6 +54,30 @@ export function PaymentsPage() {
       active = false
     }
   }, [page, version])
+
+  useEffect(() => {
+    if (!confirm || pendingId) return
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') setConfirm(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [confirm, pendingId])
+
+  async function remove(payment: PaymentRow) {
+    setPendingId(payment.id)
+    setError(null)
+    try {
+      await deletePayment(payment.id)
+      setConfirm(null)
+      setVersion((current) => current + 1)
+    } catch (err) {
+      setError(errorText(err))
+      setConfirm(null)
+    } finally {
+      setPendingId(null)
+    }
+  }
 
   return (
     <div>
@@ -111,14 +138,21 @@ export function PaymentsPage() {
             <table className="w-full min-w-[760px] text-right text-sm">
               <thead className="bg-slate-50 text-muted">
                 <tr>
-                  {['التاريخ', 'العميل', 'الحجز', 'الطريقة', 'المبلغ', 'الحالة', ''].map((header) => (
-                    <th key={header || 'actions'} className="px-4 py-3 font-medium">{header}</th>
+                  {['التاريخ', 'العميل', 'الحجز', 'الطريقة', 'المبلغ', 'الحالة', 'الإجراءات'].map((header) => (
+                    <th key={header} className="px-4 py-3 font-medium">{header}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {payments.map((payment) => (
-                  <PaymentLine key={payment.id} payment={payment} onChanged={() => setVersion((current) => current + 1)} onError={setError} />
+                  <PaymentLine
+                    key={payment.id}
+                    payment={payment}
+                    onChanged={() => setVersion((current) => current + 1)}
+                    onError={setError}
+                    onDelete={() => setConfirm(payment)}
+                    deletePending={pendingId !== null}
+                  />
                 ))}
               </tbody>
             </table>
@@ -151,6 +185,31 @@ export function PaymentsPage() {
             </table>
           </div>
         </DataShell>
+      ) : null}
+      {confirm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-navy/40 p-4"
+          onClick={() => { if (!pendingId) setConfirm(null) }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-payment-title"
+            className="w-full max-w-sm rounded-2xl border border-line bg-white p-5 shadow-lg"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h4 id="delete-payment-title" className="text-base font-semibold text-navy">حذف الدفعة</h4>
+            <p className="mt-2 text-sm leading-6 text-muted">
+              هل تريد حذف دفعة {displayName(confirm.customer_name)} بمبلغ {money(confirm.amount)}؟
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button type="button" variant="ghost" disabled={pendingId !== null} onClick={() => setConfirm(null)}>إلغاء</Button>
+              <Button type="button" variant="danger" disabled={pendingId !== null} onClick={() => remove(confirm)}>
+                {pendingId ? 'جارٍ الحذف...' : 'حذف'}
+              </Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   )
@@ -327,10 +386,14 @@ function PaymentLine({
   payment,
   onChanged,
   onError,
+  onDelete,
+  deletePending,
 }: {
   payment: PaymentRow
   onChanged: () => void
   onError: (message: string) => void
+  onDelete: () => void
+  deletePending: boolean
 }) {
   const [confirming, setConfirming] = useState(false)
   const [pending, setPending] = useState(false)
@@ -357,13 +420,27 @@ function PaymentLine({
       <td className="whitespace-nowrap px-4 py-3 font-medium tabular-nums text-navy" dir="ltr">{money(payment.amount)}</td>
       <td className="px-4 py-3"><Badge tone={payment.status === 'recorded' ? 'success' : 'neutral'}>{label.payment(payment.status)}</Badge></td>
       <td className="px-4 py-3">
-        {payment.status === 'recorded' && !confirming ? <button type="button" className="text-sm text-rose-700" onClick={() => setConfirming(true)}>إلغاء القيد</button> : null}
         {confirming ? (
           <span className="flex gap-2">
             <Button variant="danger" disabled={pending} onClick={cancel}>تأكيد</Button>
             <Button variant="secondary" onClick={() => setConfirming(false)}>تراجع</Button>
           </span>
-        ) : null}
+        ) : (
+          <span className="flex items-center gap-2">
+            {payment.status === 'recorded' ? (
+              <button type="button" className="text-sm text-rose-700" onClick={() => setConfirming(true)}>إلغاء القيد</button>
+            ) : null}
+            <button
+              type="button"
+              aria-label="حذف"
+              disabled={deletePending}
+              onClick={onDelete}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-rose-50 hover:text-rose-700 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </span>
+        )}
       </td>
     </tr>
   )

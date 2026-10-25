@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { Bell, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthProvider'
 import { listNotifications, type AuditRow } from '../lib/api'
 import { errorText } from '../lib/format'
@@ -149,35 +149,42 @@ export function useNotifications() {
   return value
 }
 
-export function NotificationInbox({ onOpen }: { onOpen?: () => void }) {
+export function NotificationInbox({ onOpen, onClose }: { onOpen?: () => void; onClose?: () => void }) {
   const { logs, loading, error, unread, isRead, markRead, markAllRead } = useNotifications()
   const rows = logs
 
   return (
-    <div>
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-gold-soft text-navy">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold-soft text-navy">
             <Bell className="h-5 w-5" aria-hidden="true" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h3 className="font-semibold text-navy">الإشعارات</h3>
             <p className="mt-0.5 text-xs text-muted">
               <span dir="ltr">{unread.toLocaleString('en-GB')}</span> غير مقروء
             </p>
           </div>
         </div>
-        {unread > 0 ? (
-          <button type="button" className="text-sm font-medium text-navy hover:text-gold" onClick={markAllRead}>
-            تعليم الكل كمقروء
-          </button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1">
+          {unread > 0 ? (
+            <button type="button" className="px-2 text-xs font-medium text-navy hover:text-gold sm:text-sm" onClick={markAllRead}>
+              تعليم الكل كمقروء
+            </button>
+          ) : null}
+          {onClose ? (
+            <button type="button" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-slate-100 hover:text-navy" aria-label="إغلاق الإشعارات" onClick={onClose}>
+              <X className="h-4 w-4" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </div>
       {error ? <p className="mt-3 text-sm text-rose-700">{error}</p> : null}
       {loading ? <p className="mt-4 text-sm text-muted">جارٍ التحميل...</p> : null}
       {!loading && !error && rows.length === 0 ? <p className="mt-4 text-sm text-muted">لا توجد إشعارات.</p> : null}
       {rows.length > 0 ? (
-        <ul className="mt-4 max-h-[calc(100vh-11rem)] divide-y divide-line overflow-y-auto">
+        <ul className="mt-4 min-h-0 flex-1 divide-y divide-line overflow-y-auto overscroll-contain">
           {rows.map((item) => (
             <NotificationItem
               key={item.id}
@@ -198,7 +205,7 @@ export function NotificationInbox({ onOpen }: { onOpen?: () => void }) {
 function NotificationItem({ item, read, onOpen }: { item: AuditRow; read: boolean; onOpen: () => void }) {
   const path = notificationPath(item)
   const className = cx(
-    'flex w-full items-start gap-3 px-2 py-3 text-right text-sm transition hover:bg-slate-50',
+    'flex w-full items-start gap-3 px-1 py-3.5 text-right text-sm transition hover:bg-slate-50 sm:px-2',
     read ? 'text-muted' : 'bg-gold-soft/50 text-navy',
   )
   const body = (
@@ -206,7 +213,7 @@ function NotificationItem({ item, read, onOpen }: { item: AuditRow; read: boolea
       <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', read ? 'bg-slate-300' : 'bg-gold')} />
       <span className="min-w-0 flex-1">
         <span className={cx('block', read ? 'font-normal' : 'font-semibold')}>{label.audit(item.action)}</span>
-        {item.detail ? <span className="mt-0.5 block truncate text-xs">{item.detail}</span> : null}
+        {item.detail ? <span className="mt-0.5 block break-words text-xs leading-5">{item.detail}</span> : null}
         <span className="mt-1 block text-xs text-muted">
           <EnglishWhen value={item.created_at} inline />
         </span>
@@ -245,19 +252,27 @@ export function NotificationBell() {
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') setOpen(false)
     }
+    function onResize() {
+      const rect = buttonRef.current?.getBoundingClientRect()
+      if (!rect) return
+      setPlace({
+        top: Math.max(16, rect.bottom + 8),
+        left: Math.max(16, Math.min(rect.left - 368, window.innerWidth - 396)),
+      })
+    }
+    onResize()
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('resize', onResize)
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('resize', onResize)
+      document.body.style.overflow = previous
+    }
   }, [open])
 
   function toggle() {
-    const rect = buttonRef.current?.getBoundingClientRect()
-    if (rect) {
-      const width = 380
-      setPlace({
-        top: 16,
-        left: Math.max(16, rect.left - width - 12),
-      })
-    }
     setOpen((current) => {
       if (!current) reload()
       return !current
@@ -269,7 +284,7 @@ export function NotificationBell() {
       <button
         ref={buttonRef}
         type="button"
-        className="relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gold hover:bg-white/10"
+        className="relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-current hover:bg-slate-100 lg:hover:bg-white/10"
         aria-expanded={open}
         aria-label="الإشعارات"
         onClick={toggle}
@@ -284,12 +299,18 @@ export function NotificationBell() {
       {open
         ? createPortal(
             <>
-              <button className="fixed inset-0 z-50 cursor-default" aria-label="إغلاق الإشعارات" onClick={() => setOpen(false)} />
+              <button className="fixed inset-0 z-50 bg-navy/40" aria-label="إغلاق الإشعارات" onClick={() => setOpen(false)} />
               <div
-                className="fixed z-[60] max-h-[calc(100vh-2rem)] w-[380px] overflow-hidden rounded-2xl border border-line bg-white p-4 text-ink shadow-lg"
-                style={{ top: place.top, left: place.left }}
+                role="dialog"
+                aria-modal="true"
+                aria-label="الإشعارات"
+                className="fixed inset-x-0 bottom-0 z-[60] flex max-h-[min(92dvh,40rem)] flex-col overflow-hidden rounded-t-3xl border border-line bg-white px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 text-ink shadow-lg lg:inset-auto lg:max-h-[calc(100vh-2rem)] lg:w-[380px] lg:rounded-2xl lg:p-4 lg:[left:var(--panel-left)] lg:[top:var(--panel-top)]"
+                style={{ ['--panel-top' as string]: `${place.top}px`, ['--panel-left' as string]: `${place.left}px` }}
               >
-                <NotificationInbox onOpen={() => setOpen(false)} />
+                <div className="mb-2 flex justify-center lg:hidden" aria-hidden="true">
+                  <span className="h-1.5 w-12 rounded-full bg-slate-200" />
+                </div>
+                <NotificationInbox onOpen={() => setOpen(false)} onClose={() => setOpen(false)} />
               </div>
             </>,
             document.body,

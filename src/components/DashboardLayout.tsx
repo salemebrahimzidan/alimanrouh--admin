@@ -72,7 +72,9 @@ export function DashboardLayout() {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-gold">لوحة الإدارة</p>
-                <NotificationBell />
+                <div className="hidden text-gold lg:block">
+                  <NotificationBell />
+                </div>
               </div>
               <h1 className="mt-1 text-sm font-semibold leading-6">{agencyName}</h1>
             </div>
@@ -106,10 +108,11 @@ export function DashboardLayout() {
         </div>
       </aside>
       <div className="min-w-0 lg:mr-[272px]">
-        <header className="sticky top-0 z-20 flex h-16 items-center border-b border-line bg-white/95 px-4 backdrop-blur lg:hidden">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-line bg-white/95 px-4 text-navy backdrop-blur lg:hidden">
           <button type="button" className="rounded-lg p-2 text-navy" onClick={() => setOpen(true)} aria-label="فتح القائمة">
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
+          <NotificationBell />
         </header>
         <main className="px-4 py-6 lg:px-8 lg:py-8">
           <Outlet />

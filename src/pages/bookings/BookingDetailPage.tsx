@@ -212,7 +212,7 @@ export function BookingDetailPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to="/bookings"
+            to={`/bookings?customer=${booking.customer_id}`}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-3 text-sm font-medium text-navy shadow-sm transition hover:border-gold hover:text-gold"
           >
             <ArrowRight className="h-4 w-4" aria-hidden="true" />
