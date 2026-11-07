@@ -814,6 +814,12 @@ export async function setSupportConversationStatus(id: string, status: SupportCo
   }))
 }
 
+export async function deleteSupportConversation(id: string) {
+  unwrap(await db().rpc('support_admin_delete', {
+    p_conversation_id: id,
+  }))
+}
+
 export async function markSupportConversationRead(id: string) {
   unwrap(await db().rpc('support_mark_read', { p_conversation_id: id }))
 }
