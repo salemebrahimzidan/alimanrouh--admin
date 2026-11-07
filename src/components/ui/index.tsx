@@ -251,7 +251,7 @@ export function FilterSelect({
   const items = [{ value: '', label: allLabel, tone: 'neutral' as Tone }, ...options]
 
   return (
-    <div ref={rootRef} className={cx('relative w-full max-w-60 shrink-0', className)}>
+    <div ref={rootRef} className={cx('relative shrink-0', className ?? 'w-full max-w-60')}>
       <button
         type="button"
         aria-haspopup="listbox"
